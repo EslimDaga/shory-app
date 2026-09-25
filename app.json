@@ -9,13 +9,17 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.shoryapp.app",
-      "appleTeamId": "228QXV53GS"
+      "appleTeamId": "228QXV53GS",
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png",
+        "tinted": "./assets/icon-tinted.png"
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0A0A0C",
+        "backgroundColor": "#CCFF00",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
