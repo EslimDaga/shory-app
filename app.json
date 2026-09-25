@@ -1,25 +1,81 @@
 {
   "expo": {
-    "name": "shory-app",
+    "name": "shory",
     "slug": "shory-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.shoryapp.app",
+      "appleTeamId": "228QXV53GS"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0A0A0C",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.shoryapp.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsText": true
+          },
+          "androidIntentFilters": [
+            "text/*"
+          ]
+        }
+      ],
+      [
+        "react-native-share",
+        {
+          "ios": [
+            "instagram",
+            "instagram-stories"
+          ],
+          "android": [
+            "com.instagram.android"
+          ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "enableSceneSupport": true
+          }
+        }
+      ],
+      "expo-status-bar",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Shory usa tus fotos para ponerlas de fondo en tu historia.",
+          "cameraPermission": "Shory usa la cámara para tomar la foto de fondo de tu historia.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Shory usa tus fotos para ponerlas de fondo en tu historia.",
+          "savePhotosPermission": "Shory guarda tus historias terminadas en Fotos.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
+    ],
+    "scheme": "shoryapp"
   }
 }
