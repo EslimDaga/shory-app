@@ -7,7 +7,7 @@ import { LiquidGlass } from './glass/LiquidGlass';
 import { getTonePalette } from './tonePalette';
 import type { WidgetProps, WidgetTone } from './types';
 
-export const PLAYER_SIZE = { width: 352, height: 212 };
+export const PLAYER_SIZE = { width: 352, height: 200 };
 
 const INSET = 6;
 const PROGRESS = 0.42;
@@ -134,9 +134,12 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
+    justifyContent: 'center',
     paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 14,
+    // Extra top padding offsets the transparent inset inside the transport icons' viewBox,
+    // so the visible gap above the cover matches the one below the controls.
+    paddingTop: 19,
+    paddingBottom: 13,
     borderRadius: 32,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
