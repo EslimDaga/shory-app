@@ -1,6 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { editorColors } from '@/theme/colors';
-import { fonts } from '@/theme/typography';
 import { getTonePalette } from '@/widgets/tonePalette';
 import type { WidgetTone } from '@/widgets/types';
 import { WIDGET_TONES } from '../editorTools';
@@ -34,7 +33,6 @@ export function ToneTray({ accentColor, selected, onSelect }: Props) {
                   : { backgroundColor: palette.surface, borderColor: palette.hairline },
               ]}
             />
-            <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
           </Pressable>
         );
       })}
@@ -44,19 +42,16 @@ export function ToneTray({ accentColor, selected, onSelect }: Props) {
 
 const styles = StyleSheet.create({
   chip: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
-    height: 42,
-    paddingHorizontal: 16,
-    borderRadius: 21,
+    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: editorColors.surfaceRaised,
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
   active: { borderColor: editorColors.accent },
-  dot: { width: 16, height: 16, borderRadius: 8, borderWidth: 1 },
+  dot: { width: 22, height: 22, borderRadius: 11, borderWidth: 1 },
   glassDot: { backgroundColor: 'rgba(255, 255, 255, 0.28)', borderColor: 'rgba(255, 255, 255, 0.7)' },
-  label: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.6, color: editorColors.textMuted },
-  labelActive: { color: editorColors.text },
 });
