@@ -1,6 +1,5 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
-import { SourceLogo } from '@/components/SourceLogo';
 import { withAlpha } from '@/utils/color';
 import { formatDuration } from '@/utils/time';
 import { LiquidGlass } from './glass/LiquidGlass';
@@ -64,7 +63,6 @@ export function PlayerWidget({ track, tone }: WidgetProps) {
               </Text>
             ) : null}
           </View>
-          <SourceLogo source={track.source} size={22} />
         </View>
 
         <View style={styles.progressRow}>
@@ -147,10 +145,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   cover: { width: 64, height: 64, borderRadius: 11, backgroundColor: 'rgba(0, 0, 0, 0.3)' },
   titles: { flex: 1 },
-  title: { fontSize: 21, fontWeight: '700', letterSpacing: -0.4 },
-  artist: { fontSize: 19, fontWeight: '400', letterSpacing: -0.3, marginTop: 1 },
+  title: { fontSize: 17, fontWeight: '700', letterSpacing: -0.4 },
+  artist: { fontSize: 15, fontWeight: '400', letterSpacing: -0.3, marginTop: 1 },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20 },
-  time: { fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  time: { fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
   progressTrack: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill: { width: `${PROGRESS * 100}%`, height: '100%', borderRadius: 3 },
   controls: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
