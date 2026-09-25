@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import type { StoryBackground } from '@/types/storyBackground';
@@ -12,6 +13,8 @@ type Props = {
 
 const BACKDROP_BLUR = 22;
 const FALLBACK_BLUR = 30;
+// Upper bound on how long a widget stays hidden waiting for its blurred backdrop.
+const REVEAL_TIMEOUT_MS = 700;
 
 export function LiquidGlass({ widgetWidth, widgetHeight, inset, fallbackImageUri }: Props) {
   const backdrop = useStoryBackdrop();
@@ -74,12 +77,36 @@ function BackdropSlice({
         transform: [{ translateX: offsetX }, { translateY: offsetY }, { scale: inverseScale }],
       }}
     >
-      <BackgroundFill background={backdrop.background} />
+      <BackgroundFill background={backdrop.background} holdReveal={backdrop.holdReveal} />
     </Animated.View>
   );
 }
 
-function BackgroundFill({ background }: { background: StoryBackground }) {
+function BackgroundFill({
+  background,
+  holdReveal,
+}: {
+  background: StoryBackground;
+  holdReveal: StoryBackdrop['holdReveal'];
+}) {
+  const photoUri = background.kind === 'photo' ? background.uri : null;
+  const releaseRef = useRef<(() => void) | null>(null);
+
+  // Runs before paint: the widget stays hidden until the blurred photo is decoded,
+  // instead of flashing an empty glass card that fills in a moment later.
+  useLayoutEffect(() => {
+    if (!photoUri) return;
+    const release = holdReveal();
+    releaseRef.current = release;
+    const timeout = setTimeout(release, REVEAL_TIMEOUT_MS);
+    return () => {
+      clearTimeout(timeout);
+      release();
+    };
+  }, [photoUri, holdReveal]);
+
+  const onSettled = () => releaseRef.current?.();
+
   if (background.kind === 'photo') {
     return (
       <Image
@@ -87,6 +114,9 @@ function BackgroundFill({ background }: { background: StoryBackground }) {
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
         blurRadius={BACKDROP_BLUR}
+        fadeDuration={0}
+        onLoad={onSettled}
+        onError={onSettled}
       />
     );
   }
