@@ -3,9 +3,8 @@ import type { View } from 'react-native';
 import { strings } from '@/i18n/es';
 import { shareToInstagramStories } from '@/services/instagram/instagramStories';
 import { saveToPhotos } from '@/services/media/photoLibrary';
-import { captureStoryImage, captureTransparentPng } from '@/services/media/viewCapture';
+import { captureStoryImage } from '@/services/media/viewCapture';
 import type { TrackMetadata } from '@/types/music';
-import type { StoryBackground } from '@/types/storyBackground';
 import { getErrorMessage } from '@/utils/errors';
 import { hapticImpact, hapticSelection, hapticSuccess } from '@/utils/haptics';
 
@@ -13,15 +12,12 @@ export type ExportAction = 'share' | 'save';
 
 type Options = {
   track: TrackMetadata;
-  background: StoryBackground;
   onExported?: (track: TrackMetadata) => void;
   onMessage: (text: string, isError?: boolean) => void;
 };
 
-export function useStoryExport({ track, background, onExported, onMessage }: Options) {
+export function useStoryExport({ track, onExported, onMessage }: Options) {
   const storyRef = useRef<View>(null);
-  const backgroundRef = useRef<View>(null);
-  const widgetRef = useRef<View>(null);
   const [pendingAction, setPendingAction] = useState<ExportAction | null>(null);
 
   const shareToStories = async () => {
@@ -29,13 +25,8 @@ export function useStoryExport({ track, background, onExported, onMessage }: Opt
     hapticImpact();
     setPendingAction('share');
     try {
-      const stickerUri = await captureTransparentPng(widgetRef);
-      const isPhoto = background.kind === 'photo';
       await shareToInstagramStories({
-        stickerUri,
-        backgroundImageUri: isPhoto ? await captureStoryImage(backgroundRef) : undefined,
-        backgroundTopColor: isPhoto ? undefined : background.top,
-        backgroundBottomColor: isPhoto ? undefined : background.bottom,
+        storyImageUri: await captureStoryImage(storyRef),
         linkUrl: track.url,
       });
       onExported?.(track);
@@ -62,5 +53,5 @@ export function useStoryExport({ track, background, onExported, onMessage }: Opt
     }
   };
 
-  return { storyRef, backgroundRef, widgetRef, pendingAction, shareToStories, saveStory };
+  return { storyRef, pendingAction, shareToStories, saveStory };
 }

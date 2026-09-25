@@ -50,8 +50,11 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
   const showMessage = useCallback((text: string, isError = false) => setToast({ text, isError }), []);
   const hideToast = useCallback(() => setToast(null), []);
 
-  const { storyRef, backgroundRef, widgetRef, pendingAction, shareToStories, saveStory } =
-    useStoryExport({ track, background, onExported, onMessage: showMessage });
+  const { storyRef, pendingAction, shareToStories, saveStory } = useStoryExport({
+    track,
+    onExported,
+    onMessage: showMessage,
+  });
 
   const onStageLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -86,14 +89,11 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
               width={canvasSize.width}
               height={canvasSize.height}
               background={background}
-              backgroundRef={backgroundRef}
               storyRef={storyRef}
               resetKey={widget.id}
               onBackgroundPress={() => setActiveTool(null)}
             >
-              <View ref={widgetRef} collapsable={false}>
-                <WidgetComponent track={track} tone={tone} />
-              </View>
+              <WidgetComponent track={track} tone={tone} />
             </StoryCanvas>
 
             <GlassButton label={strings.editor.close} onPress={onClose} style={styles.closeButton}>
