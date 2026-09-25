@@ -1,6 +1,6 @@
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
-import { ShareIcon } from '@/components/Icons';
+import { DownloadIcon } from '@/components/Icons';
 import { strings } from '@/i18n/es';
 import { editorColors } from '@/theme/colors';
 import type { StoryBackground } from '@/types/storyBackground';
@@ -14,7 +14,7 @@ type Props = {
   backgroundTrayOpen: boolean;
   onToggleBackgroundTray: () => void;
   onShare: () => void;
-  onShareSheet: () => void;
+  onSave: () => void;
 };
 
 export function BottomBar({
@@ -24,7 +24,7 @@ export function BottomBar({
   backgroundTrayOpen,
   onToggleBackgroundTray,
   onShare,
-  onShareSheet,
+  onSave,
 }: Props) {
   return (
     <View style={styles.bar}>
@@ -54,19 +54,19 @@ export function BottomBar({
         )}
       </Pressable>
 
-      <Shutter coverUrl={coverUrl} spinning={pendingAction === 'instagram'} onPress={onShare} />
+      <Shutter coverUrl={coverUrl} spinning={pendingAction === 'share'} onPress={onShare} />
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={strings.editor.share}
-        onPress={onShareSheet}
+        accessibilityLabel={strings.editor.saveToPhotos}
+        onPress={onSave}
         disabled={pendingAction !== null}
-        style={({ pressed }) => [styles.shareButton, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}
       >
-        {pendingAction === 'share' ? (
+        {pendingAction === 'save' ? (
           <ActivityIndicator color={editorColors.text} />
         ) : (
-          <ShareIcon size={20} />
+          <DownloadIcon size={20} />
         )}
       </Pressable>
     </View>
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   backgroundThumbActive: { borderColor: editorColors.accent },
-  shareButton: {
+  saveButton: {
     width: 44,
     height: 44,
     borderRadius: 22,

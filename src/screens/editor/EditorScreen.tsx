@@ -50,7 +50,7 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
   const showMessage = useCallback((text: string, isError = false) => setToast({ text, isError }), []);
   const hideToast = useCallback(() => setToast(null), []);
 
-  const { storyRef, backgroundRef, widgetRef, pendingAction, shareToStories, shareStory } =
+  const { storyRef, backgroundRef, widgetRef, pendingAction, shareToStories, saveStory } =
     useStoryExport({ track, background, onExported, onMessage: showMessage });
 
   const onStageLayout = (event: LayoutChangeEvent) => {
@@ -150,9 +150,9 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
           setActiveTool(null);
           shareToStories();
         }}
-        onShareSheet={() => {
+        onSave={() => {
           setActiveTool(null);
-          shareStory();
+          saveStory();
         }}
       />
     </View>

@@ -43,8 +43,9 @@ export const strings = {
     autoColor: 'Color automático',
     backgroundPreset: (id: string) => `Fondo ${id}`,
     widgetOption: (name: string) => `Widget ${name}`,
-    share: 'Compartir',
+    saveToPhotos: 'Guardar en Fotos',
     shareToStories: 'Compartir en Instagram Stories',
+    savedToPhotos: 'Guardada en Fotos',
   },
   widgets: {
     player: 'Player',
@@ -66,8 +67,9 @@ export const strings = {
     instagramWebUnsupported: 'Compartir en Instagram solo funciona en iOS/Android.',
     captureWebUnsupported: 'La captura solo funciona en iOS/Android.',
     photoOpenFailed: 'No se pudo abrir la foto.',
-    shareFailed: 'No se pudo compartir.',
-    shareWebUnsupported: 'Compartir solo funciona en iOS/Android.',
+    saveFailed: 'No se pudo guardar.',
+    saveWebUnsupported: 'Guardar en Fotos solo funciona en iOS/Android.',
     cameraPermission: 'Activa el permiso de cámara en Ajustes para tomar la foto.',
+    photosPermission: 'Activa el permiso de Fotos en Ajustes para guardar la imagen.',
   },
 } as const;

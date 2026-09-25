@@ -19,10 +19,10 @@ export function CloseIcon({ size = 22, color = editorColors.text }: IconProps) {
   );
 }
 
-export function ShareIcon({ size = 22, color = editorColors.text }: IconProps) {
+export function DownloadIcon({ size = 22, color = editorColors.text }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" {...stroke(color)}>
-      <Path d="M12 14.5V3.5M8 7.5l4-4 4 4M8.5 10.5H7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1.5" />
+      <Path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />
     </Svg>
   );
 }

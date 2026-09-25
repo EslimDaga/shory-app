@@ -2,14 +2,14 @@ import { useRef, useState } from 'react';
 import type { View } from 'react-native';
 import { strings } from '@/i18n/es';
 import { shareToInstagramStories } from '@/services/instagram/instagramStories';
-import { shareImage } from '@/services/media/shareImage';
+import { saveToPhotos } from '@/services/media/photoLibrary';
 import { captureStoryImage, captureTransparentPng } from '@/services/media/viewCapture';
 import type { TrackMetadata } from '@/types/music';
 import type { StoryBackground } from '@/types/storyBackground';
 import { getErrorMessage } from '@/utils/errors';
-import { hapticImpact, hapticSelection } from '@/utils/haptics';
+import { hapticImpact, hapticSelection, hapticSuccess } from '@/utils/haptics';
 
-export type ExportAction = 'instagram' | 'share';
+export type ExportAction = 'share' | 'save';
 
 type Options = {
   track: TrackMetadata;
@@ -27,7 +27,7 @@ export function useStoryExport({ track, background, onExported, onMessage }: Opt
   const shareToStories = async () => {
     if (pendingAction) return;
     hapticImpact();
-    setPendingAction('instagram');
+    setPendingAction('share');
     try {
       const stickerUri = await captureTransparentPng(widgetRef);
       const isPhoto = background.kind === 'photo';
@@ -46,19 +46,21 @@ export function useStoryExport({ track, background, onExported, onMessage }: Opt
     }
   };
 
-  const shareStory = async () => {
+  const saveStory = async () => {
     if (pendingAction) return;
     hapticSelection();
-    setPendingAction('share');
+    setPendingAction('save');
     try {
-      const shared = await shareImage(await captureStoryImage(storyRef));
-      if (shared) onExported?.(track);
+      await saveToPhotos(await captureStoryImage(storyRef));
+      hapticSuccess();
+      onMessage(strings.editor.savedToPhotos);
+      onExported?.(track);
     } catch (error) {
-      onMessage(getErrorMessage(error, strings.errors.shareFailed), true);
+      onMessage(getErrorMessage(error, strings.errors.saveFailed), true);
     } finally {
       setPendingAction(null);
     }
   };
 
-  return { storyRef, backgroundRef, widgetRef, pendingAction, shareToStories, shareStory };
+  return { storyRef, backgroundRef, widgetRef, pendingAction, shareToStories, saveStory };
 }

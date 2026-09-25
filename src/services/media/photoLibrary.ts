@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import { Asset, requestPermissionsAsync } from 'expo-media-library';
 import { strings } from '@/i18n/es';
 
 export type PhotoSource = 'library' | 'camera';
@@ -15,4 +16,10 @@ export async function pickPhoto(source: PhotoSource): Promise<string | null> {
       ? await ImagePicker.launchCameraAsync(PICKER_OPTIONS)
       : await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
   return result.canceled ? null : (result.assets[0]?.uri ?? null);
+}
+
+export async function saveToPhotos(fileUri: string): Promise<void> {
+  const { granted } = await requestPermissionsAsync(true);
+  if (!granted) throw new Error(strings.errors.photosPermission);
+  await Asset.create(fileUri);
 }
