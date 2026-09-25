@@ -49,12 +49,7 @@ export const strings = {
   },
   widgets: {
     player: 'Player',
-    vinyl: 'Vinilo',
-    polaroid: 'Polaroid',
-    ticket: 'Ticket',
     mini: 'Mini',
-    ticketHeadline: 'ADMIT ONE · NOW PLAYING',
-    ticketFallbackMeta: 'SIDE A',
   },
   errors: {
     unknown: 'Error desconocido',
