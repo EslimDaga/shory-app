@@ -5,10 +5,6 @@ import { STORY_EXPORT_SIZE } from '@/theme/layout';
 
 const toFileUri = (uri: string) => (uri.startsWith('file://') ? uri : `file://${uri}`);
 
-export async function captureTransparentPng(ref: RefObject<View | null>): Promise<string> {
-  return toFileUri(await captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile' }));
-}
-
 export async function captureStoryImage(ref: RefObject<View | null>): Promise<string> {
   return toFileUri(
     await captureRef(ref, {

@@ -1,10 +1,8 @@
 import { strings } from '@/i18n/es';
 
 export type InstagramStoryPayload = {
-  stickerUri: string;
-  backgroundImageUri?: string;
-  backgroundTopColor?: string;
-  backgroundBottomColor?: string;
+  /** Full 9:16 story, widget already composited at the position chosen in the editor. */
+  storyImageUri: string;
   linkUrl?: string;
 };
 

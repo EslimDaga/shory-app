@@ -11,7 +11,6 @@ type Props = {
   width: number;
   height: number;
   background: StoryBackground;
-  backgroundRef: RefObject<View | null>;
   storyRef: RefObject<View | null>;
   resetKey: string;
   onBackgroundPress?: () => void;
@@ -22,7 +21,6 @@ export function StoryCanvas({
   width,
   height,
   background,
-  backgroundRef,
   storyRef,
   resetKey,
   onBackgroundPress,
@@ -53,9 +51,7 @@ export function StoryCanvas({
   return (
     <View style={[styles.clip, { width, height }]}>
       <View ref={storyRef} collapsable={false} style={StyleSheet.absoluteFill}>
-        <View ref={backgroundRef} collapsable={false} style={StyleSheet.absoluteFill}>
-          <BackgroundLayer background={background} />
-        </View>
+        <BackgroundLayer background={background} />
 
         <Pressable style={StyleSheet.absoluteFill} onPress={onBackgroundPress} />
 

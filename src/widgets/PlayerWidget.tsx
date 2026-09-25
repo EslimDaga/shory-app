@@ -1,12 +1,13 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { SourceLogo } from '@/components/SourceLogo';
 import { withAlpha } from '@/utils/color';
 import { formatDuration } from '@/utils/time';
 import { LiquidGlass } from './glass/LiquidGlass';
 import { getTonePalette } from './tonePalette';
 import type { WidgetProps, WidgetTone } from './types';
 
-export const PLAYER_SIZE = { width: 352, height: 212 };
+export const PLAYER_SIZE = { width: 352, height: 200 };
 
 const INSET = 6;
 const PROGRESS = 0.42;
@@ -78,7 +79,9 @@ export function PlayerWidget({ track, tone }: WidgetProps) {
         </View>
 
         <View style={styles.controls}>
-          <View style={styles.sideSlot} />
+          <View style={[styles.sideSlot, styles.leadingSlot]}>
+            <SourceLogo source={track.source} size={24} />
+          </View>
           <View style={styles.transport}>
             <SkipIcon color={iconColor} flipped />
             <PauseIcon color={iconColor} />
@@ -131,9 +134,12 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
+    justifyContent: 'center',
     paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 14,
+    // Extra top padding offsets the transparent inset inside the transport icons' viewBox,
+    // so the visible gap above the cover matches the one below the controls.
+    paddingTop: 19,
+    paddingBottom: 13,
     borderRadius: 32,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
@@ -153,6 +159,7 @@ const styles = StyleSheet.create({
   progressFill: { width: `${PROGRESS * 100}%`, height: '100%', borderRadius: 3 },
   controls: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
   sideSlot: { width: 32, alignItems: 'flex-end' },
+  leadingSlot: { alignItems: 'flex-start' },
   transport: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 38 },
   flipped: { transform: [{ scaleX: -1 }] },
 });
