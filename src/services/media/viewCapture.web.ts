@@ -7,3 +7,7 @@ export async function captureStoryImage(): Promise<string> {
 export async function captureStickerLayer(): Promise<string> {
   throw new Error(strings.errors.captureWebUnsupported);
 }
+
+export async function captureScreenStill(): Promise<string> {
+  throw new Error(strings.errors.captureWebUnsupported);
+}

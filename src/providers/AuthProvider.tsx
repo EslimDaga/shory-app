@@ -1,5 +1,5 @@
 import * as Linking from 'expo-linking';
-import { createContext, use, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { createContext, use, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { strings } from '@/i18n/es';
 import * as authService from '@/services/auth/authService';
 import {
@@ -37,39 +37,62 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// Token refreshes hand over a new but identical user; keeping the old object stops every screen that
+// depends on `user` from re-running its effects each hour.
+function sameUser(a: AuthUser | null, b: AuthUser | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.email === b.email &&
+    a.avatarUrl === b.avatarUrl &&
+    a.provider === b.provider
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('restoring');
   const [user, setUser] = useState<AuthUser | null>(null);
   const [pendingMethod, setPendingMethod] = useState<AuthMethod | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false);
+  // The in-flight guard lives in a ref: two taps in the same frame both see `pendingMethod` as null.
+  const pendingRef = useRef(false);
   const clearError = useCallback(() => setError(null), []);
+
+  const applyUser = useCallback((next: AuthUser | null) => {
+    setUser((current) => (sameUser(current, next) ? current : next));
+    setStatus(next ? 'signedIn' : 'signedOut');
+    if (!next) setRecovering(false);
+  }, []);
 
   useEffect(() => {
     let active = true;
     authService.restoreSession().then((restored) => {
-      if (!active) return;
-      setUser(restored);
-      setStatus(restored ? 'signedIn' : 'signedOut');
+      if (active) applyUser(restored);
     });
     const unsubscribe = authService.subscribeToSession((next) => {
-      if (!active) return;
-      setUser(next);
-      setStatus(next ? 'signedIn' : 'signedOut');
+      if (active) applyUser(next);
     });
     return () => {
       active = false;
       unsubscribe();
     };
-  }, []);
+  }, [applyUser]);
 
   useEffect(() => {
     const handleUrl = async (url: string | null) => {
       if (!url) return;
-      const result = await authService.handleAuthUrl(url);
-      if (!result) return;
-      if (result.kind === 'error') setError(result.message);
-      if (result.kind === 'recovery') setRecovering(true);
+      try {
+        const result = await authService.handleAuthUrl(url);
+        if (!result) return;
+        if (result.kind === 'error') setError(result.message);
+        if (result.kind === 'recovery') setRecovering(true);
+      } catch (caught) {
+        // A malformed link or an unconfigured backend: say so rather than leave an unhandled rejection.
+        setError(getErrorMessage(caught));
+      }
     };
     Linking.getInitialURL().then(handleUrl);
     const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
@@ -77,7 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const run = async <T,>(method: AuthMethod, action: () => Promise<T>): Promise<T | null> => {
-    if (pendingMethod) return null;
+    if (pendingRef.current) return null;
+    pendingRef.current = true;
     setError(null);
     setPendingMethod(method);
     try {
@@ -86,14 +110,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!(caught instanceof AuthCancelledError)) setError(getErrorMessage(caught));
       return null;
     } finally {
+      pendingRef.current = false;
       setPendingMethod(null);
     }
   };
 
-  const acceptUser = (signedIn: AuthUser) => {
-    setUser(signedIn);
-    setStatus('signedIn');
-  };
+  const acceptUser = (signedIn: AuthUser) => applyUser(signedIn);
 
   const signIn = async (provider: AuthProviderId) => {
     const signedIn = await run(provider, async () =>
@@ -156,17 +178,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authService.signOut();
     } finally {
-      setUser(null);
-      setRecovering(false);
-      setStatus('signedOut');
+      applyUser(null);
     }
   };
 
   const deleteAccount = async () => {
     try {
       await authService.deleteAccount();
-      setUser(null);
-      setStatus('signedOut');
+      applyUser(null);
     } catch (caught) {
       // Backing out of the Apple confirmation just leaves the account as it was.
       if (caught instanceof AuthCancelledError) return;

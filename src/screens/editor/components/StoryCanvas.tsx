@@ -9,9 +9,9 @@ import {
   type RefObject,
 } from 'react';
 import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
-import { captureRef } from 'react-native-view-shot';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { editorColors } from '@/theme/colors';
+import { captureScreenStill } from '@/services/media/viewCapture';
 import { STORY_ASPECT, STORY_WIDTH } from '@/theme/layout';
 import type { GradientBackground, PhotoBackground, StoryBackground } from '@/types/storyBackground';
 import { StoryBackdropContext, type StoryBackdrop } from '@/widgets/glass/StoryBackdropContext';
@@ -138,10 +138,10 @@ export function StoryCanvas({
       );
       const factor = Math.max(1, Math.min(1 / INSTAGRAM_STICKER_SCALE, fit));
       // A quick screen-resolution still hides the switch to translucent glass on screen.
-      const still = await captureRef(storyRef, { format: 'jpg', quality: 0.8, result: 'tmpfile' });
+      const still = await captureScreenStill(storyRef);
       await new Promise<void>((resolve) => {
         freezeLoaded.current = resolve;
-        setFreezeUri(still.startsWith('file://') ? still : `file://${still}`);
+        setFreezeUri(still);
       });
       setCaptureRegion(factor);
       setAdaptiveGlass(true);
@@ -174,7 +174,13 @@ export function StoryCanvas({
           </View>
         )}
 
-        <Pressable style={StyleSheet.absoluteFill} onPress={onBackgroundPress} />
+        {/* Tap-to-dismiss for the open tray only; screen readers close it with its own controls. */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onBackgroundPress}
+          accessible={false}
+          tabIndex={-1}
+        />
 
         {!template && (
           <View

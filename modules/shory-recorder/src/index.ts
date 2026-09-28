@@ -11,6 +11,9 @@ type NativeRecorder = {
 
 export type VideoDescription = { posterUri: string; durationSeconds: number };
 
+// The native module is iOS-only (and missing from older dev clients): without it, video isn't offered.
+export const videoRecordingSupported = requireOptionalNativeModule('ShoryRecorder') != null;
+
 // Looked up lazily: a build without the native module (e.g. an older dev client) still opens,
 // and only recording a video fails, with a clear error.
 function recorder(): NativeRecorder {

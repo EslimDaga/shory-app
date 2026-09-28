@@ -42,16 +42,16 @@ const DEVICES = {
 
 export type AudioDevice = keyof typeof DEVICES;
 
-export const AUDIO_DEVICES: { id: AudioDevice; name: string; short: string }[] = [
-  { id: 'airpods', name: 'AirPods', short: 'AirPods' },
-  { id: 'airpods-2gen', name: 'AirPods (2.ª gen.)', short: '2.ª gen.' },
-  { id: 'airpods-3gen', name: 'AirPods (3.ª gen.)', short: '3.ª gen.' },
-  { id: 'airpods-pro', name: 'AirPods Pro', short: 'Pro' },
-  { id: 'airpods-max', name: 'AirPods Max', short: 'Max' },
-  { id: 'earpods', name: 'EarPods', short: 'EarPods' },
-  { id: 'homepod', name: 'HomePod', short: 'HomePod' },
-  { id: 'hifi-speaker', name: 'Altavoz HiFi', short: 'HiFi' },
-  { id: 'ipod', name: 'iPod', short: 'iPod' },
+export const AUDIO_DEVICES: { id: AudioDevice; name: string }[] = [
+  { id: 'airpods', name: 'AirPods' },
+  { id: 'airpods-2gen', name: 'AirPods (2.ª gen.)' },
+  { id: 'airpods-3gen', name: 'AirPods (3.ª gen.)' },
+  { id: 'airpods-pro', name: 'AirPods Pro' },
+  { id: 'airpods-max', name: 'AirPods Max' },
+  { id: 'earpods', name: 'EarPods' },
+  { id: 'homepod', name: 'HomePod' },
+  { id: 'hifi-speaker', name: 'Altavoz HiFi' },
+  { id: 'ipod', name: 'iPod' },
 ];
 
 type Props = { device: AudioDevice; color: string; size?: number };

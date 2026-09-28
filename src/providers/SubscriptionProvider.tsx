@@ -1,7 +1,8 @@
-import { createContext, use, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { createContext, use, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { CustomerInfo } from 'react-native-purchases';
 import { strings } from '@/i18n/es';
 import {
+  ensureUser,
   getCustomerInfo,
   hasPro,
   listenToCustomerInfo,
@@ -20,7 +21,10 @@ import {
 import { useAuth } from './AuthProvider';
 
 // Why the paywall opened: it leads with the feature the person just tried to use.
-export type ProFeature = 'widget' | 'template' | 'video' | 'watermark' | 'football' | 'upgrade';
+export type ProFeature = 'widget' | 'template' | 'video' | 'upgrade';
+
+// How a purchase or restore ended. `message` says what went wrong; null when the person cancelled.
+type StoreOutcome = { ok: true } | { ok: false; message: string | null };
 
 type SubscriptionContextValue = {
   isPro: boolean;
@@ -40,8 +44,8 @@ type SubscriptionContextValue = {
   closePaywall: () => void;
   // True if the user has Pro; otherwise opens the paywall for `feature` and returns false.
   requirePro: (feature: ProFeature) => boolean;
-  buy: (plan: Plan) => Promise<boolean>;
-  restorePurchases: () => Promise<boolean>;
+  buy: (plan: Plan) => Promise<StoreOutcome>;
+  restorePurchases: () => Promise<StoreOutcome>;
 };
 
 type PlansStatus = 'idle' | 'loading' | 'failed';
@@ -54,6 +58,10 @@ function logStoreError(where: string, error: unknown) {
 // Only our own wording reaches the paywall, never the store's developer-facing text.
 const storeMessage = (error: unknown) =>
   error instanceof StoreError ? error.message : strings.paywall.failed;
+
+// The server's record is read once per session, so it only counts until the date it expires.
+const serverGrantsPro = (plan: ServerPlan | null) =>
+  plan?.plan === 'pro' && (!plan.expiresAt || Date.parse(plan.expiresAt) > Date.now());
 
 type Account = {
   userId: string | null;
@@ -73,32 +81,68 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account>(EMPTY_ACCOUNT);
   const current = account.userId !== null && account.userId === userId ? account : EMPTY_ACCOUNT;
   const { customerInfo, serverPlan, plans } = current;
-  const update = useCallback(
-    (owner: string, patch: Partial<Omit<Account, 'userId'>>) =>
-      setAccount((previous) => ({
-        ...(previous.userId === owner ? previous : { ...EMPTY_ACCOUNT, userId: owner }),
-        ...patch,
-      })),
-    [],
-  );
+  // The account signed in right now, for results that arrive after an await.
+  const userIdRef = useRef(userId);
+  const update = useCallback((owner: string, patch: Partial<Omit<Account, 'userId'>>) => {
+    // A late result for an account that has signed out must not replace the next one's state.
+    if (userIdRef.current !== owner) return;
+    setAccount((previous) => ({
+      ...(previous.userId === owner ? previous : { ...EMPTY_ACCOUNT, userId: owner }),
+      ...patch,
+    }));
+  }, []);
   const [paywall, setPaywall] = useState<ProFeature | null>(null);
   const [unlocked, setUnlocked] = useState<'purchase' | 'restore' | null>(null);
   const [busy, setBusy] = useState<'purchase' | 'restore' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Plans are fetched with the account; if that failed (offline, store not ready), opening the
+  // paywall tries again rather than showing an empty screen.
+  const [plansStatus, setPlansStatus] = useState<PlansStatus>('idle');
+  // The store's own reason, shown in development builds only.
+  const [plansError, setPlansError] = useState<string | null>(null);
+
+  // The paywall belongs to the session it opened in: signing out (or into another account) closes
+  // it and forgets its result, so it never stays over the sign-in screen.
+  const [sessionUserId, setSessionUserId] = useState(userId);
+  if (sessionUserId !== userId) {
+    setSessionUserId(userId);
+    setPaywall(null);
+    setUnlocked(null);
+    setError(null);
+    setPlansStatus('idle');
+    setPlansError(null);
+  }
 
   // Purchases follow the Shory account: switching accounts switches whose purchases are shown.
   useEffect(() => {
+    userIdRef.current = userId;
     if (!userId) {
       stopPurchases();
       return;
     }
     let active = true;
     let unsubscribe = () => {};
+    const refreshServerPlan = async () => {
+      const plan = await syncServerPlan();
+      // A failed sync keeps the last known plan rather than dropping to free.
+      if (active && plan) update(userId, { serverPlan: plan });
+    };
+    // Whether the store granted Pro the last time it reported, to notice the moment it stops.
+    let storePro = false;
+    const onStoreInfo = (info: CustomerInfo | null) => {
+      if (!active) return;
+      update(userId, { customerInfo: info });
+      const wasPro = storePro;
+      storePro = hasPro(info);
+      // Pro ended in the store (expired, refunded): the server's copy is re-read so it stops
+      // unlocking Pro as well.
+      if (wasPro && !storePro) refreshServerPlan();
+    };
     (async () => {
       try {
         await startPurchases(userId);
         if (!active) return;
-        unsubscribe = listenToCustomerInfo((info) => active && update(userId, { customerInfo: info }));
+        unsubscribe = listenToCustomerInfo(onStoreInfo);
         const [info, loadedPlans] = await Promise.all([
           getCustomerInfo(),
           loadPlans().catch((error) => {
@@ -106,13 +150,13 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             return [];
           }),
         ]);
-        if (active) update(userId, { customerInfo: info, plans: loadedPlans });
+        onStoreInfo(info);
+        if (active) update(userId, { plans: loadedPlans });
       } catch (error) {
         logStoreError('startPurchases', error);
         // Store unreachable: the app keeps working on the free plan and the server's record.
       }
-      const plan = await syncServerPlan();
-      if (active) update(userId, { serverPlan: plan });
+      await refreshServerPlan();
     })();
     return () => {
       active = false;
@@ -120,22 +164,21 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     };
   }, [userId, update]);
 
-  const isPro = hasPro(customerInfo) || serverPlan?.plan === 'pro';
+  const isPro = hasPro(customerInfo) || serverGrantsPro(serverPlan);
 
-  // Plans are fetched with the account; if that failed (offline, store not ready), opening the
-  // paywall tries again rather than showing an empty screen.
-  const [plansStatus, setPlansStatus] = useState<PlansStatus>('idle');
-  // The store's own reason, shown in development builds only.
-  const [plansError, setPlansError] = useState<string | null>(null);
   const reloadPlans = useCallback(async () => {
     if (!userId || !purchasesAvailable) return;
     setPlansStatus('loading');
     try {
-      update(userId, { plans: await loadPlans() });
+      const loaded = await loadPlans();
+      // Signed out meanwhile: the session reset already cleared the status.
+      if (userIdRef.current !== userId) return;
+      update(userId, { plans: loaded });
       setPlansError(null);
       setPlansStatus('idle');
     } catch (error) {
       logStoreError('reloadPlans', error);
+      if (userIdRef.current !== userId) return;
       setPlansError(error instanceof Error ? error.message : String(error));
       setPlansStatus('failed');
     }
@@ -150,10 +193,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     },
     [plans.length, reloadPlans],
   );
-  const closePaywall = useCallback(() => {
-    setPaywall(null);
-    setUnlocked(null);
-  }, []);
+  // Only hides the sheet: the welcome screen stays on it while it slides away. Opening the
+  // paywall again starts it fresh.
+  const closePaywall = useCallback(() => setPaywall(null), []);
 
   const requirePro = (feature: ProFeature) => {
     if (isPro) return true;
@@ -161,45 +203,66 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
-  const settle = async (info: CustomerInfo, action: 'purchase' | 'restore') => {
-    if (!userId) return false;
-    update(userId, { customerInfo: info });
+  const fail = (message: string): StoreOutcome => {
+    setError(message);
+    return { ok: false, message };
+  };
+
+  const settle = async (
+    owner: string,
+    info: CustomerInfo,
+    action: 'purchase' | 'restore',
+  ): Promise<StoreOutcome> => {
+    update(owner, { customerInfo: info });
     // The server re-reads the purchase from RevenueCat before trusting it.
-    const plan = await syncServerPlan();
-    update(userId, { serverPlan: plan });
-    if (hasPro(info) || plan?.plan === 'pro') {
+    const sync = syncServerPlan().then((plan) => {
+      if (plan) update(owner, { serverPlan: plan });
+      return plan;
+    });
+    // The store already confirmed Pro: no need to wait for the server, which catches up behind.
+    if (hasPro(info)) {
       setUnlocked(action);
-      return true;
+      return { ok: true };
+    }
+    const plan = await sync;
+    // Signed out meanwhile: the plan was read with whatever session is current now.
+    if (userIdRef.current !== owner) return { ok: false, message: null };
+    if (serverGrantsPro(plan)) {
+      setUnlocked(action);
+      return { ok: true };
     }
     // A purchase that went through but hasn't unlocked Pro yet (the store is still confirming it)
     // must never end in silence.
-    setError(action === 'restore' ? strings.paywall.nothingToRestore : strings.paywall.notActiveYet);
-    return false;
+    return fail(action === 'restore' ? strings.paywall.nothingToRestore : strings.paywall.notActiveYet);
   };
 
-  const buy = async (plan: Plan) => {
-    if (busy) return false;
+  const buy = async (plan: Plan): Promise<StoreOutcome> => {
+    // Never without a Shory account: the purchase would land on an anonymous store id.
+    if (busy || !userId) return { ok: false, message: null };
+    const owner = userId;
     setBusy('purchase');
     setError(null);
     try {
-      return await settle(await purchase(plan), 'purchase');
+      await ensureUser(owner);
+      return await settle(owner, await purchase(plan), 'purchase');
     } catch (caught) {
-      if (!(caught instanceof PurchaseCancelledError)) setError(storeMessage(caught));
-      return false;
+      if (caught instanceof PurchaseCancelledError) return { ok: false, message: null };
+      return fail(storeMessage(caught));
     } finally {
       setBusy(null);
     }
   };
 
-  const restorePurchases = async () => {
-    if (busy) return false;
+  const restorePurchases = async (): Promise<StoreOutcome> => {
+    if (busy || !userId) return { ok: false, message: null };
+    const owner = userId;
     setBusy('restore');
     setError(null);
     try {
-      return await settle(await restore(), 'restore');
+      await ensureUser(owner);
+      return await settle(owner, await restore(), 'restore');
     } catch (caught) {
-      setError(storeMessage(caught));
-      return false;
+      return fail(storeMessage(caught));
     } finally {
       setBusy(null);
     }

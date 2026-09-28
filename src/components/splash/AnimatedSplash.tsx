@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, StyleSheet } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import Svg, { Path } from 'react-native-svg';
@@ -84,13 +84,18 @@ export function AnimatedSplash({ ready, onExitStart, onFinish }: Props) {
     };
   }, [laidOut, values]);
 
+  // Kept out of the exit effect's dependencies: onExitStart re-renders the parent with new inline
+  // callbacks, which would stop the fade and start it over.
+  const exitStarted = useEffectEvent(() => onExitStart?.());
+  const exitFinished = useEffectEvent(() => onFinish());
+
   useEffect(() => {
     if (!introDone || !ready) return;
     const exit = timing(values.exit, 0, EXIT_MS, Easing.in(Easing.cubic));
-    onExitStart?.();
-    exit.start(({ finished }) => finished && onFinish());
+    exitStarted();
+    exit.start(({ finished }) => finished && exitFinished());
     return () => exit.stop();
-  }, [introDone, ready, values, onExitStart, onFinish]);
+  }, [introDone, ready, values]);
 
   const handleLayout = () => {
     if (laidOut) return;
@@ -112,7 +117,9 @@ export function AnimatedSplash({ ready, onExitStart, onFinish }: Props) {
       accessibilityRole="image"
       accessibilityLabel="Shory"
     >
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: values.orb, transform: [{ scale: orbScale }] }]}>
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { opacity: values.orb, transform: [{ scale: orbScale }] }]}
+      >
         <SplashOrb />
       </Animated.View>
 

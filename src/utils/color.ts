@@ -17,7 +17,7 @@ export function mixColors(hex: string, target: string, amount: number): string {
   return toHex(from.map((v, i) => v + (to[i] - v) * amount) as Rgb);
 }
 
-export function relativeLuminance(hex: string): number {
+function relativeLuminance(hex: string): number {
   const channel = (v: number) => {
     const s = v / 255;
     return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;

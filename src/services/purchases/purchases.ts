@@ -1,8 +1,10 @@
 import { Platform } from 'react-native';
 import Purchases, {
+  INTRO_ELIGIBILITY_STATUS,
   LOG_LEVEL,
   PURCHASES_ERROR_CODE,
   type CustomerInfo,
+  type IntroEligibility,
   type PurchasesPackage,
 } from 'react-native-purchases';
 import { strings } from '@/i18n/es';
@@ -11,18 +13,19 @@ import { getSupabase } from '@/services/auth/supabase';
 // App Store purchases go through RevenueCat. The public SDK key is safe in the app: it can only
 // start purchases and read the signed-in user's own status. The secret key lives in Supabase.
 const API_KEY = Platform.OS === 'ios' ? (process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '') : '';
-export const PRO_ENTITLEMENT = 'pro';
+const PRO_ENTITLEMENT = 'pro';
 
 export const purchasesAvailable = API_KEY.length > 0;
 
-export type PlanPeriod = 'monthly' | 'annual';
+type PlanPeriod = 'monthly' | 'annual';
 
 export type Plan = {
   period: PlanPeriod;
   price: string;
   // Only the annual plan: what it works out to per month, for comparison.
   pricePerMonth: string | null;
-  // Free trial length in days, if this plan starts with one (Apple's introductory offer).
+  // Free trial length in days, if this plan starts with one (Apple's introductory offer) and this
+  // Apple ID can still use it.
   trialDays: number | null;
   pkg: PurchasesPackage;
 };
@@ -50,10 +53,7 @@ const STORE_MESSAGES: Partial<Record<PURCHASES_ERROR_CODE, string>> = {
 };
 
 export class StoreError extends Error {
-  constructor(
-    message: string,
-    readonly code: string | null,
-  ) {
+  constructor(message: string) {
     super(message);
     this.name = 'StoreError';
   }
@@ -63,7 +63,7 @@ function toStoreError(error: unknown): StoreError {
   const code = (error as { code?: string } | null)?.code ?? null;
   const message = (code && STORE_MESSAGES[code as PURCHASES_ERROR_CODE]) || strings.paywall.failed;
   if (__DEV__) console.log(`[purchases] store error ${code ?? '?'}:`, (error as Error)?.message);
-  return new StoreError(message, code);
+  return new StoreError(message);
 }
 
 // RevenueCat's default handler sends its errors to console.error, which covers the screen with
@@ -95,6 +95,21 @@ export async function startPurchases(userId: string): Promise<void> {
   await Purchases.logIn(userId);
 }
 
+// Purchases must land on the signed-in Shory account. If switching RevenueCat to it failed at
+// sign-in (offline), RevenueCat is still on an anonymous id, so it switches again before buying.
+export async function ensureUser(userId: string): Promise<void> {
+  if (!purchasesAvailable) return;
+  try {
+    if (!configured) {
+      await startPurchases(userId);
+      return;
+    }
+    if ((await Purchases.getAppUserID()) !== userId) await Purchases.logIn(userId);
+  } catch (error) {
+    throw toStoreError(error);
+  }
+}
+
 export async function stopPurchases(): Promise<void> {
   if (!configured) return;
   try {
@@ -121,7 +136,12 @@ export async function getCustomerInfo(): Promise<CustomerInfo | null> {
   return Purchases.getCustomerInfo();
 }
 
-function trialDays(pkg: PurchasesPackage): number | null {
+// Apple gives the free trial only to an Apple ID that hasn't had one in this subscription group:
+// not to a lapsed subscriber, nor to a second Shory account on the same Apple ID. Unless RevenueCat
+// confirms eligibility, the plan shows its normal price instead of a trial Apple won't honor.
+function trialDays(pkg: PurchasesPackage, eligibility: Record<string, IntroEligibility>): number | null {
+  const status = eligibility[pkg.product.identifier]?.status;
+  if (status !== INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE) return null;
   const intro = pkg.product.introPrice;
   if (!intro || intro.price !== 0) return null;
   const perUnit = { DAY: 1, WEEK: 7, MONTH: 30, YEAR: 365 }[intro.periodUnit] ?? 0;
@@ -135,13 +155,19 @@ export async function loadPlans(): Promise<Plan[]> {
   const offerings = await Purchases.getOfferings();
   const current = offerings.current;
   if (!current) throw new Error('RevenueCat has no current offering');
+  const offered = [current.annual, current.monthly].flatMap((pkg) => (pkg ? [pkg.product.identifier] : []));
+  const eligibility: Record<string, IntroEligibility> =
+    await Purchases.checkTrialOrIntroductoryPriceEligibility(offered).catch((error) => {
+      if (__DEV__) console.log('[purchases] trial eligibility:', (error as Error)?.message);
+      return {};
+    });
   const plans: Plan[] = [];
   if (current.annual) {
     plans.push({
       period: 'annual',
       price: current.annual.product.priceString,
       pricePerMonth: current.annual.product.pricePerMonthString,
-      trialDays: trialDays(current.annual),
+      trialDays: trialDays(current.annual, eligibility),
       pkg: current.annual,
     });
   }
@@ -150,7 +176,7 @@ export async function loadPlans(): Promise<Plan[]> {
       period: 'monthly',
       price: current.monthly.product.priceString,
       pricePerMonth: null,
-      trialDays: trialDays(current.monthly),
+      trialDays: trialDays(current.monthly, eligibility),
       pkg: current.monthly,
     });
   }
@@ -188,15 +214,17 @@ export type ServerPlan = {
   willRenew: boolean;
 };
 
+// The Edge Function waits up to 10 s on RevenueCat; past this the sync gives up (returns null)
+// rather than keep a purchase spinner running on a stalled network.
+const SYNC_TIMEOUT_MS = 15_000;
+
 // Asks the server to re-read the purchase from RevenueCat and store it (see the `subscription`
 // Edge Function). Server-side Pro features (live football data) go by that stored plan.
 export async function syncServerPlan(): Promise<ServerPlan | null> {
   try {
     const { data, error } = await getSupabase().functions.invoke<{ subscription: ServerPlan }>(
       'subscription',
-      {
-        method: 'POST',
-      },
+      { method: 'POST', timeout: SYNC_TIMEOUT_MS },
     );
     return error || !data ? null : data.subscription;
   } catch {

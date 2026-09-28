@@ -8,6 +8,8 @@ export type InstagramStoryPayload =
 
 const FACEBOOK_APP_ID = process.env.EXPO_PUBLIC_FB_APP_ID ?? '';
 const INSTAGRAM_ANDROID_PACKAGE = 'com.instagram.android';
+// Declared in LSApplicationQueriesSchemes (react-native-share plugin in app.json), so iOS answers.
+const INSTAGRAM_STORIES_URL = 'instagram-stories://share';
 
 // Instagram's own story camera. Stories started there can carry a song (the Music sticker);
 // stories handed over by another app can't — Instagram blocks music on those.
@@ -29,6 +31,9 @@ export async function shareToInstagramStories(payload: InstagramStoryPayload): P
   if (Platform.OS === 'android') {
     const { isInstalled } = await Share.isPackageInstalled(INSTAGRAM_ANDROID_PACKAGE);
     if (!isInstalled) throw new Error(strings.errors.instagramNotInstalled);
+  } else if (!(await Linking.canOpenURL(INSTAGRAM_STORIES_URL))) {
+    // On iOS the share writes the pasteboard and reports success even with no Instagram to open.
+    throw new Error(strings.errors.instagramNotInstalled);
   }
 
   await Share.shareSingle({

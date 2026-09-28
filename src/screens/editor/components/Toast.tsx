@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Animated, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, Animated, Platform, StyleSheet, Text } from 'react-native';
 import { CheckIcon } from '@/components/Icons';
 import { editorColors } from '@/theme/colors';
 import { fonts } from '@/theme/typography';
@@ -15,6 +15,9 @@ export function Toast({ text, isError, onHidden }: Props) {
   const [opacity] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
+    // The toast is the only feedback a save or share gives, so screen readers must hear it too. On
+    // the web the live region below does it; announcing there as well would read it twice.
+    if (Platform.OS !== 'web') AccessibilityInfo.announceForAccessibility(text);
     const animation = Animated.sequence([
       Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
       Animated.delay(isError ? ERROR_DURATION_MS : SUCCESS_DURATION_MS),
@@ -25,7 +28,13 @@ export function Toast({ text, isError, onHidden }: Props) {
   }, [text, isError, opacity, onHidden]);
 
   return (
-    <Animated.View pointerEvents="none" style={[styles.toast, { opacity }]}>
+    <Animated.View
+      pointerEvents="none"
+      {...(Platform.OS === 'web'
+        ? ({ role: isError ? 'alert' : 'status', 'aria-live': isError ? 'assertive' : 'polite' } as const)
+        : null)}
+      style={[styles.toast, { opacity }]}
+    >
       {!isError && <CheckIcon size={16} />}
       <Text style={[styles.text, isError && styles.errorText]}>{text}</Text>
     </Animated.View>

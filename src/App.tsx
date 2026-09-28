@@ -34,14 +34,14 @@ export default function App() {
 
 function AppContent() {
   const fontsLoaded = useAppFonts();
-  const { status, recovering } = useAuth();
+  const { status, recovering, user } = useAuth();
   const [splashDone, setSplashDone] = useState(false);
   const [revealed, setRevealed] = useState(false);
-  const { history, addExport } = useHistory();
+  const signedIn = status === 'signedIn';
+  const { history, addExport } = useHistory(signedIn ? (user?.id ?? null) : null);
   const { state, error, loadFromClipboard, openTrack, close } = useTrackLoader();
 
   const ready = fontsLoaded && status !== 'restoring';
-  const signedIn = status === 'signedIn';
   const isEditing = signedIn && state.status === 'ready';
 
   return (

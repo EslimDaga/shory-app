@@ -9,6 +9,7 @@ import { FALLBACK_ACCENT } from '@/constants/storyBackgrounds';
 import { strings } from '@/i18n/es';
 import { isLightColor, mixColors } from '@/utils/color';
 import { formatDuration } from '@/utils/time';
+import { playbackPosition } from '../playback';
 import { readData, toNumber, type WidgetProps } from '../types';
 
 // Dynamic Island, after the iOS 17 Dynamic Island Components kit (Figma Community): the island is
@@ -24,7 +25,6 @@ const MUTED = 'rgba(235, 235, 245, 0.6)';
 const TRACK = 'rgba(255, 255, 255, 0.22)';
 const IOS_GREEN = '#32D74B';
 const IOS_ORANGE = '#FF9F0A';
-const FALLBACK_DURATION_MS = 200000;
 
 function Island({
   size,
@@ -77,9 +77,7 @@ function Waveform({ color, height }: { color: string; height: number }) {
 
 export function IslandNowPlayingWidget({ track, progress = 0.42 }: WidgetProps) {
   const clock = useStoryClock();
-  const durationMs = track.durationMs ?? FALLBACK_DURATION_MS;
-  const shown = clock === null ? progress : Math.min(1, progress + (clock * 1000) / durationMs);
-  const elapsedMs = durationMs * shown;
+  const { shown, elapsedMs, remainingMs } = playbackPosition(track.durationMs, progress, clock);
   return (
     <Island size={ISLAND_EXPANDED} radius={48}>
       <View style={styles.expanded}>
@@ -103,7 +101,7 @@ export function IslandNowPlayingWidget({ track, progress = 0.42 }: WidgetProps) 
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${shown * 100}%` }]} />
           </View>
-          <Text style={styles.time}>-{formatDuration(durationMs - elapsedMs)}</Text>
+          <Text style={styles.time}>-{formatDuration(remainingMs)}</Text>
         </View>
 
         <View style={styles.controls}>
@@ -174,17 +172,20 @@ function BatteryRing({ percent }: { percent: number }) {
     <View style={styles.battery}>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
         <Circle cx={size / 2} cy={size / 2} r={radius} stroke={TRACK} strokeWidth={stroke} fill="none" />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={color}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          fill="none"
-          strokeDasharray={`${(circumference * percent) / 100} ${circumference}`}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
+        {/* A zero-length round-capped stroke still draws a dot, so an empty battery gets no arc. */}
+        {percent > 0 && (
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            fill="none"
+            strokeDasharray={`${(circumference * percent) / 100} ${circumference}`}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        )}
       </Svg>
       <Text style={[styles.batteryText, { color }]}>{percent}%</Text>
     </View>
@@ -250,13 +251,12 @@ function AirPlayGlyph() {
 
 const styles = StyleSheet.create({
   root: { padding: INSET, justifyContent: 'center' },
+  // boxShadow rather than shadow*: with overflow hidden, iOS clips a layer shadow away, but it draws
+  // a boxShadow outside and moves the clipping to an inner view.
   island: {
     backgroundColor: '#000000',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    boxShadow: '0px 6px 12px rgba(0, 0, 0, 0.35)',
   },
   expanded: {
     flex: 1,

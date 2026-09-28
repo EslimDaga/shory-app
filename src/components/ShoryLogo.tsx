@@ -52,7 +52,7 @@ export function ShoryLogo({
   }));
 
   return (
-    <View style={{ width, height }} accessibilityRole="image" accessibilityLabel="Shory">
+    <View style={{ width, height }} accessible accessibilityRole="image" accessibilityLabel="Shory">
       <Svg width={width} height={height} viewBox={VIEW_BOX}>
         {LOGO_LETTERS.map((d) => (
           <Path key={d} d={d} fill={color} />

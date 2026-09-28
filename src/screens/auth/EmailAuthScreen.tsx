@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -27,6 +28,7 @@ import { isPasswordStrongEnough } from '@/utils/passwordStrength';
 import type { AuthMode } from './AuthScreen';
 import { BackButton } from './components/OnboardingHeader';
 import { SoftBackdrop } from './components/SoftBackdrop';
+import { useAnnounce } from './hooks/useAnnounce';
 
 type EmailView =
   { kind: 'form'; mode: AuthMode } | { kind: 'reset' } | { kind: 'sent'; reason: 'confirm' | 'reset' };
@@ -68,6 +70,7 @@ export function EmailAuthScreen({ mode, onBack }: Props) {
   const passwordRef = useRef<TextInput>(null);
 
   useEffect(() => clearError, [clearError]);
+  useAnnounce(error);
 
   const busy = pendingMethod === 'email';
 
@@ -113,6 +116,19 @@ export function EmailAuthScreen({ mode, onBack }: Props) {
     else go({ kind: 'form', mode: 'login' });
   };
 
+  // Registered after AuthFlow's listener, so it runs first: the reset and inbox views step back to
+  // the form like the on-screen back button, and only the form lets AuthFlow pop the whole step.
+  const onHardwareBack = useEffectEvent(() => {
+    if (view.kind === 'form') return false;
+    go({ kind: 'form', mode: 'login' });
+    return true;
+  });
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => onHardwareBack());
+    return () => subscription.remove();
+  }, []);
+
   return (
     <View style={styles.screen}>
       <SoftBackdrop />
@@ -147,9 +163,14 @@ export function EmailAuthScreen({ mode, onBack }: Props) {
                   ? text.checkInboxConfirm(email.trim())
                   : text.checkInboxReset(email.trim())}
               </Text>
-              {view.reason === 'confirm' && (
+              {view.reason === 'confirm' ? (
                 <ConfirmCodeForm email={email.trim().toLowerCase()} error={error} busy={busy} />
-              )}
+              ) : error ? (
+                // A reset link that failed (expired, or already opened by a mail scanner) lands here.
+                <Animated.Text entering={FadeIn} style={styles.error} aria-live="polite">
+                  {error}
+                </Animated.Text>
+              ) : null}
               <PillButton
                 label={text.resetBack}
                 variant="light"
@@ -231,7 +252,7 @@ export function EmailAuthScreen({ mode, onBack }: Props) {
               )}
 
               {error ? (
-                <Animated.Text entering={FadeIn} style={styles.error} accessibilityLiveRegion="polite">
+                <Animated.Text entering={FadeIn} style={styles.error} aria-live="polite">
                   {error}
                 </Animated.Text>
               ) : null}
@@ -282,6 +303,7 @@ function ConfirmCodeForm({ email, error, busy }: { email: string; error: string 
   const [invalid, setInvalid] = useState(false);
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_S);
   const [resent, setResent] = useState(false);
+  useAnnounce(resent ? text.codeResent : null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -326,18 +348,17 @@ function ConfirmCodeForm({ email, error, busy }: { email: string; error: string 
         error={invalid ? text.validation.code : undefined}
       />
       {error ? (
-        <Animated.Text entering={FadeIn} style={styles.error} accessibilityLiveRegion="polite">
+        <Animated.Text entering={FadeIn} style={styles.error} aria-live="polite">
           {error}
         </Animated.Text>
       ) : resent ? (
-        <Animated.Text entering={FadeIn} style={styles.notice} accessibilityLiveRegion="polite">
+        <Animated.Text entering={FadeIn} style={styles.notice} aria-live="polite">
           {text.codeResent}
         </Animated.Text>
       ) : null}
       <PillButton label={text.codeVerify} loading={busy} onPress={verify} />
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ disabled: cooldown > 0 }}
         disabled={cooldown > 0 || busy}
         onPress={resend}
         style={styles.switch}

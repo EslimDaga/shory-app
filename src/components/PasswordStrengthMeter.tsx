@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useEffectEvent } from 'react';
+import { AccessibilityInfo, Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolateColor,
@@ -38,25 +38,38 @@ function hintFor(score: number, missing: PasswordRequirement[]): string {
 
 export function PasswordStrengthMeter({ password, invalid = false }: Props) {
   const { score, missing } = evaluatePassword(password);
+  const hint = hintFor(score, missing);
   const level = useSharedValue<number>(score);
 
   useEffect(() => {
     level.value = withTiming(score, { duration: FILL_MS, easing: Easing.out(Easing.cubic) });
   }, [score, level]);
 
+  // VoiceOver ignores the hint's live region. Speak it only when a submit rejects the password,
+  // not on every keystroke that changes it.
+  const announceHint = useEffectEvent(() => {
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibilityWithOptions(hint, { queue: true });
+  });
+
+  useEffect(() => {
+    if (invalid) announceHint();
+  }, [invalid]);
+
   return (
     <View style={styles.root}>
       <Text
         style={[styles.hint, invalid && styles.hintInvalid, missing.length === 0 && styles.hintStrong]}
-        accessibilityLiveRegion="polite"
+        aria-live="polite"
       >
-        {hintFor(score, missing)}
+        {hint}
       </Text>
       <View
         style={styles.segments}
         accessibilityRole="progressbar"
         accessibilityLabel={text.label}
-        accessibilityValue={{ min: 0, max: SEGMENTS, now: score }}
+        aria-valuemin={0}
+        aria-valuemax={SEGMENTS}
+        aria-valuenow={score}
       >
         {Array.from({ length: SEGMENTS }, (_, index) => (
           <Segment key={index} index={index} level={level} />

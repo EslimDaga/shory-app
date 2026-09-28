@@ -55,48 +55,63 @@ function wipeIfFreshInstall(): Promise<void> {
   return installCheck;
 }
 
-export const secureSessionStorage: KeyValueStore = {
-  async getItem(key) {
-    await wipeIfFreshInstall();
-    const count = await readChunkCount(key);
-    if (count > 0) {
-      const chunks = await Promise.all(
-        Array.from({ length: count }, (_, index) => SecureStore.getItemAsync(chunkKey(key, index), OPTIONS)),
-      );
-      // A partial write (app killed mid-save) leaves a corrupt session: treat it as signed out.
-      if (chunks.some((chunk) => chunk === null)) {
-        await removeSecure(key);
-        return null;
-      }
-      return chunks.join('');
-    }
-
-    // Sessions saved by earlier versions sat in plain app storage: move them into the Keychain.
-    const legacy = await keyValue.getItem(key);
-    if (legacy === null) return null;
-    await secureSessionStorage.setItem(key, legacy);
-    await keyValue.removeItem(key);
-    return legacy;
-  },
-
-  async setItem(key, value) {
-    await wipeIfFreshInstall();
-    await removeSecure(key);
-    const chunks = value.match(new RegExp(`[\\s\\S]{1,${CHUNK_SIZE}}`, 'g')) ?? [''];
-    await Promise.all(
-      chunks.map((chunk, index) => SecureStore.setItemAsync(chunkKey(key, index), chunk, OPTIONS)),
+async function getItemImpl(key: string): Promise<string | null> {
+  await wipeIfFreshInstall();
+  const count = await readChunkCount(key);
+  if (count > 0) {
+    const chunks = await Promise.all(
+      Array.from({ length: count }, (_, index) => SecureStore.getItemAsync(chunkKey(key, index), OPTIONS)),
     );
-    // The count goes last: until it's written, a reader sees no session rather than half of one.
-    await SecureStore.setItemAsync(countKey(key), String(chunks.length), OPTIONS);
-    const index = await readIndex();
-    if (!index.includes(key)) {
-      await SecureStore.setItemAsync(INDEX_KEY, JSON.stringify([...index, key]), OPTIONS);
+    // A partial write (app killed mid-save) leaves a corrupt session: treat it as signed out.
+    if (chunks.some((chunk) => chunk === null)) {
+      await removeSecure(key);
+      return null;
     }
-  },
+    return chunks.join('');
+  }
 
-  async removeItem(key) {
-    await wipeIfFreshInstall();
-    await removeSecure(key);
-    await keyValue.removeItem(key);
-  },
+  // Sessions saved by earlier versions sat in plain app storage: move them into the Keychain.
+  const legacy = await keyValue.getItem(key);
+  if (legacy === null) return null;
+  await setItemImpl(key, legacy);
+  await keyValue.removeItem(key);
+  return legacy;
+}
+
+async function setItemImpl(key: string, value: string): Promise<void> {
+  await wipeIfFreshInstall();
+  await removeSecure(key);
+  const chunks = value.match(new RegExp(`[\\s\\S]{1,${CHUNK_SIZE}}`, 'g')) ?? [''];
+  await Promise.all(
+    chunks.map((chunk, index) => SecureStore.setItemAsync(chunkKey(key, index), chunk, OPTIONS)),
+  );
+  // The count goes last: until it's written, a reader sees no session rather than half of one.
+  await SecureStore.setItemAsync(countKey(key), String(chunks.length), OPTIONS);
+  const index = await readIndex();
+  if (!index.includes(key)) {
+    await SecureStore.setItemAsync(INDEX_KEY, JSON.stringify([...index, key]), OPTIONS);
+  }
+}
+
+async function removeItemImpl(key: string): Promise<void> {
+  await wipeIfFreshInstall();
+  await removeSecure(key);
+  await keyValue.removeItem(key);
+}
+
+// supabase-js reads and writes the session without a lock (a token refresh re-reads it while other
+// calls save it), and a chunked write isn't atomic. Running one operation at a time means a reader
+// never sees a half-written session, and the corrupt-session cleanup can't delete a write in progress.
+let queue: Promise<unknown> = Promise.resolve();
+
+function serialized<T>(operation: () => Promise<T>): Promise<T> {
+  const run = queue.then(operation);
+  queue = run.catch(() => undefined);
+  return run;
+}
+
+export const secureSessionStorage: KeyValueStore = {
+  getItem: (key) => serialized(() => getItemImpl(key)),
+  setItem: (key, value) => serialized(() => setItemImpl(key, value)),
+  removeItem: (key) => serialized(() => removeItemImpl(key)),
 };

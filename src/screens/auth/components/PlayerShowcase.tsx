@@ -82,8 +82,9 @@ export function PlayerShowcase({ active }: Props) {
 
   // Every slide stays mounted, stacked in a fixed order: covers and blurred backdrops are
   // decoded up front and nothing remounts or reorders on a change, so the card never shifts.
+  // The songs are made up and the times tick every second, so screen readers skip the whole stage.
   return (
-    <View style={styles.stage}>
+    <View style={styles.stage} aria-hidden>
       {SLIDES.map((slide, slideIndex) => (
         <SlideLayer key={slideIndex} slide={slide} slideIndex={slideIndex} step={step} active={active} />
       ))}
@@ -124,12 +125,7 @@ function SlideLayer({
   const visible = slideIndex === index;
 
   return (
-    <Animated.View
-      style={[StyleSheet.absoluteFill, animatedStyle]}
-      pointerEvents="none"
-      accessibilityElementsHidden={!visible}
-      importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
-    >
+    <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]} pointerEvents="none">
       <PlayerWidget
         track={slide.track}
         tone="dark"

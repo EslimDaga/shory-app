@@ -16,7 +16,6 @@ type Props = {
   highlight?: string;
   delay?: number;
   stagger?: number;
-  align?: 'center' | 'left';
 };
 
 const WORD_MS = 520;
@@ -24,17 +23,14 @@ const WORD_RISE = 18;
 const HIGHLIGHT_MS = 520;
 const easeOut = Easing.out(Easing.cubic);
 
-export function KineticText({ text, style, highlight, delay = 0, stagger = 55, align = 'center' }: Props) {
+export function KineticText({ text, style, highlight, delay = 0, stagger = 55 }: Props) {
   const words = text.split(' ');
   const flat = StyleSheet.flatten(style);
   const fontSize = flat?.fontSize ?? 16;
 
   return (
     <View
-      style={[
-        styles.row,
-        { justifyContent: align === 'center' ? 'center' : 'flex-start', columnGap: fontSize * 0.26 },
-      ]}
+      style={[styles.row, { columnGap: fontSize * 0.26 }]}
       accessible
       accessibilityRole="header"
       accessibilityLabel={text}
@@ -106,7 +102,7 @@ function Word({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', flexWrap: 'wrap' },
+  row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
   highlight: {
     position: 'absolute',
     left: -3,

@@ -1,5 +1,14 @@
-import { forwardRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { forwardRef, useEffect, useState } from 'react';
+import {
+  AccessibilityInfo,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputProps,
+} from 'react-native';
 import { EyeIcon } from '@/components/Icons';
 import { strings } from '@/i18n/es';
 import { onboardingColors } from '@/theme/colors';
@@ -18,6 +27,13 @@ export const TextField = forwardRef<TextInput, Props>(function TextField(
   const [focused, setFocused] = useState(false);
   const [revealed, setRevealed] = useState(false);
 
+  // VoiceOver ignores the error's live region. Queued, because a failed submit can flag several
+  // fields at once and each announcement would otherwise cut off the one before it.
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !error) return;
+    AccessibilityInfo.announceForAccessibilityWithOptions(error, { queue: true });
+  }, [error]);
+
   return (
     <View style={styles.wrapper}>
       <Text style={styles.label}>{label}</Text>
@@ -26,6 +42,8 @@ export const TextField = forwardRef<TextInput, Props>(function TextField(
           ref={ref}
           {...inputProps}
           accessibilityLabel={label}
+          // Read again whenever the field gets focus, so the error isn't only a one-off announcement.
+          accessibilityHint={error ?? undefined}
           secureTextEntry={secure && !revealed}
           placeholderTextColor={onboardingColors.inkMuted}
           style={styles.input}
@@ -49,7 +67,11 @@ export const TextField = forwardRef<TextInput, Props>(function TextField(
           </Pressable>
         )}
       </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <Text style={styles.error} aria-live="polite">
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 });

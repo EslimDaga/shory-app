@@ -255,8 +255,17 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
   content: {},
 };
 
+const defaultConfigs = new Map<string, WidgetConfig>();
+
+// One shared object per widget, so memoized previews of unconfigured widgets see the same config
+// on every editor render. Callers spread it before changing anything; never mutate it.
 export function defaultConfigFor(widget: WidgetDefinition): WidgetConfig {
-  return { ...DEFAULT_WIDGET_CONFIG, content: { ...widget.defaults } };
+  let config = defaultConfigs.get(widget.id);
+  if (!config) {
+    config = { ...DEFAULT_WIDGET_CONFIG, content: { ...widget.defaults } };
+    defaultConfigs.set(widget.id, config);
+  }
+  return config;
 }
 
 export function findWidget(id: string): WidgetDefinition {

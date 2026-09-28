@@ -1,7 +1,9 @@
+import CoreGraphics
 import ExpoModulesCore
-import UIKit
+import Foundation
+import ImageIO
 
-private final class ImageLoadException: GenericException<String> {
+private final class ImageLoadException: GenericException<String>, @unchecked Sendable {
   override var reason: String { "Could not read the image at \(param)" }
 }
 
@@ -15,17 +17,26 @@ public final class ShoryPaletteModule: Module {
       guard let url = URL(string: uri), url.isFileURL || url.scheme == "https" else {
         throw ImageLoadException(uri)
       }
-      let data: Data?
+      let source: CGImageSource?
       if url.isFileURL {
-        data = FileManager.default.contents(atPath: url.path)
+        source = CGImageSourceCreateWithURL(url as CFURL, nil)
       } else {
         // A cover that doesn't arrive quickly just means no Magic colors, not a hung task.
         let request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 10)
-        data = try? await URLSession.shared.data(for: request).0
+        let data = try? await URLSession.shared.data(for: request).0
+        source = data.flatMap { CGImageSourceCreateWithData($0 as CFData, nil) }
       }
-      guard let data, let image = UIImage(data: data)?.cgImage else { throw ImageLoadException(uri) }
-
       let side = max(4, min(size, 128))
+      // Decoded straight at a small size: a full-resolution camera photo would take hundreds of MB.
+      let thumbnailOptions: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceThumbnailMaxPixelSize: side * 2,
+        kCGImageSourceShouldCacheImmediately: true,
+      ]
+      guard let source,
+        let image = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary)
+      else { throw ImageLoadException(uri) }
+
       var pixels = [UInt8](repeating: 0, count: side * side * 4)
       let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
         guard let context = CGContext(

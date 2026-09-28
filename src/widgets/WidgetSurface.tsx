@@ -3,11 +3,12 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { TrackMetadata } from '@/types/music';
 import { LiquidGlass } from './glass/LiquidGlass';
+import { useSvgId } from './svgId';
 import { ToneFill } from './ToneFill';
 import { getTonePalette } from './tonePalette';
 import type { WidgetTone } from './types';
 
-export const SURFACE_INSET = 10;
+const SURFACE_INSET = 10;
 
 type Props = {
   track: TrackMetadata;
@@ -59,17 +60,18 @@ export function WidgetSurface({ track, tone, width, height, radius = 30, style, 
 }
 
 function Vignette({ x, y }: { x: number; y: number }) {
+  const gradientId = useSvgId('surface-vignette');
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Svg width="100%" height="100%">
         <Defs>
-          <RadialGradient id="surface-vignette" cx={x} cy={y} rx={1.05} ry={1.05} fx={x} fy={y}>
+          <RadialGradient id={gradientId} cx={x} cy={y} rx={1.05} ry={1.05} fx={x} fy={y}>
             <Stop offset="0" stopColor="#000000" stopOpacity={0.92} />
             <Stop offset="0.55" stopColor="#000000" stopOpacity={0.45} />
             <Stop offset="1" stopColor="#000000" stopOpacity={0} />
           </RadialGradient>
         </Defs>
-        <Rect width="100%" height="100%" fill="url(#surface-vignette)" />
+        <Rect width="100%" height="100%" fill={`url(#${gradientId})`} />
       </Svg>
     </View>
   );

@@ -32,7 +32,7 @@ export function BottomBar({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={strings.editor.changeBackground}
-        accessibilityState={{ expanded: backgroundTrayOpen }}
+        aria-expanded={backgroundTrayOpen}
         onPress={onToggleBackgroundTray}
         style={({ pressed }) => [
           styles.backgroundThumb,
@@ -55,7 +55,13 @@ export function BottomBar({
         )}
       </Pressable>
 
-      <Shutter coverUrl={coverUrl} spinning={pendingAction === 'share'} onPress={onShare} />
+      {/* Blocked during a save too: a share started then would silently do nothing. */}
+      <Shutter
+        coverUrl={coverUrl}
+        spinning={pendingAction === 'share'}
+        disabled={pendingAction !== null}
+        onPress={onShare}
+      />
 
       <Pressable
         accessibilityRole="button"

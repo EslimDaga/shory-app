@@ -1,6 +1,15 @@
 import * as WebBrowser from 'expo-web-browser';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { PillButton } from '@/components/PillButton';
 import { LEGAL_URLS } from '@/constants/legal';
@@ -10,6 +19,7 @@ import { useSubscription } from '@/providers/SubscriptionProvider';
 import { manageSubscription } from '@/services/purchases/purchases';
 import { brand, homeColors } from '@/theme/colors';
 import { fonts } from '@/theme/typography';
+import { confirmDestructive } from '@/utils/confirm';
 import { getErrorMessage } from '@/utils/errors';
 import { userInitial } from './AccountButton';
 
@@ -25,6 +35,9 @@ export function AccountSheet({ visible, onClose }: Props) {
   const upgradeAfterClose = useRef(false);
   const [busy, setBusy] = useState<'signOut' | 'delete' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Same fallback as AccountButton: a broken avatar shows the initial instead of an empty circle.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const avatarUrl = user?.avatarUrl && user.avatarUrl !== failedUrl ? user.avatarUrl : null;
 
   const providerName = user ? strings.auth.providerNames[user.provider] : '';
 
@@ -34,25 +47,23 @@ export function AccountSheet({ visible, onClose }: Props) {
     setBusy(null);
   };
 
-  const confirmDelete = () => {
-    Alert.alert(strings.account.deleteConfirmTitle, strings.account.deleteConfirmBody, [
-      { text: strings.account.cancel, style: 'cancel' },
-      {
-        text: strings.account.deleteConfirm,
-        style: 'destructive',
-        onPress: async () => {
-          setBusy('delete');
-          setError(null);
-          try {
-            await deleteAccount();
-          } catch (caught) {
-            setError(getErrorMessage(caught));
-          } finally {
-            setBusy(null);
-          }
-        },
-      },
-    ]);
+  const confirmDelete = async () => {
+    const confirmed = await confirmDestructive({
+      title: strings.account.deleteConfirmTitle,
+      message: strings.account.deleteConfirmBody,
+      confirmLabel: strings.account.deleteConfirm,
+      cancelLabel: strings.account.cancel,
+    });
+    if (!confirmed) return;
+    setBusy('delete');
+    setError(null);
+    try {
+      await deleteAccount();
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
@@ -67,8 +78,12 @@ export function AccountSheet({ visible, onClose }: Props) {
     >
       <View style={styles.profile}>
         <View style={styles.avatar}>
-          {user?.avatarUrl ? (
-            <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={styles.avatarImage}
+              onError={() => setFailedUrl(avatarUrl)}
+            />
           ) : (
             <Text style={styles.initial}>{userInitial(user)}</Text>
           )}
@@ -103,6 +118,8 @@ export function AccountSheet({ visible, onClose }: Props) {
         />
         <Pressable
           accessibilityRole="button"
+          aria-label={strings.account.deleteAccount}
+          aria-busy={busy === 'delete'}
           onPress={confirmDelete}
           disabled={busy !== null}
           style={({ pressed }) => [styles.delete, pressed && styles.pressed]}
@@ -144,6 +161,8 @@ const formatDate = (iso: string) =>
 // The account's plan, with the one action that fits it: upgrade, or manage in the App Store.
 function PlanCard({ onUpgrade }: { onUpgrade: () => void }) {
   const { isPro, serverPlan, available, restorePurchases, busy } = useSubscription();
+  // The paywall is closed here, so a restore that finds nothing (or fails) says so in the card.
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const expiresAt = serverPlan?.expiresAt ?? null;
   const detail =
     !isPro || !expiresAt
@@ -175,7 +194,16 @@ function PlanCard({ onUpgrade }: { onUpgrade: () => void }) {
           />
           <Pressable
             accessibilityRole="button"
-            onPress={restorePurchases}
+            aria-label={strings.account.restore}
+            aria-busy={busy === 'restore'}
+            onPress={async () => {
+              setRestoreMessage(null);
+              const outcome = await restorePurchases();
+              if (outcome.ok || !outcome.message) return;
+              setRestoreMessage(outcome.message);
+              // VoiceOver has no live regions.
+              if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(outcome.message);
+            }}
             disabled={busy !== null}
             hitSlop={8}
             style={({ pressed }) => [styles.restore, pressed && styles.pressed]}
@@ -186,6 +214,11 @@ function PlanCard({ onUpgrade }: { onUpgrade: () => void }) {
               <Text style={styles.legalLink}>{strings.account.restore}</Text>
             )}
           </Pressable>
+          {restoreMessage ? (
+            <Text style={styles.error} aria-live="polite">
+              {restoreMessage}
+            </Text>
+          ) : null}
         </View>
       )}
     </View>

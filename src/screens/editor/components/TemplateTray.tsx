@@ -35,7 +35,7 @@ export function TemplateTray({ background, contentFor, selectedId, onSelect, onE
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={strings.templates.none}
-        accessibilityState={{ selected: selectedId === null }}
+        aria-selected={selectedId === null}
         onPress={() => onSelect(null)}
         style={({ pressed }) => pressed && styles.pressed}
       >
@@ -61,13 +61,15 @@ export function TemplateTray({ background, contentFor, selectedId, onSelect, onE
 
       {TEMPLATES.map((template) => {
         const active = template.id === selectedId;
+        const locked = template.pro && !isPro;
+        const label = strings.templates.option(template.name);
         const { Component } = template;
         return (
           <Pressable
             key={template.id}
             accessibilityRole="button"
-            accessibilityLabel={strings.templates.option(template.name)}
-            accessibilityState={{ selected: active }}
+            accessibilityLabel={locked ? strings.paywall.proLockedOption(label) : label}
+            aria-selected={active}
             onPress={() => onSelect(template)}
             style={({ pressed }) => pressed && styles.pressed}
           >
@@ -78,7 +80,7 @@ export function TemplateTray({ background, contentFor, selectedId, onSelect, onE
                 width={TILE_WIDTH}
                 height={TILE_HEIGHT}
               />
-              {template.pro && !isPro && <ProBadge style={styles.proBadge} />}
+              {locked && <ProBadge style={styles.proBadge} />}
             </View>
           </Pressable>
         );

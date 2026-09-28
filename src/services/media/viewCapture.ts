@@ -21,10 +21,7 @@ export async function captureStoryImage(ref: RefObject<View | null>): Promise<st
   );
 }
 
-export async function captureStickerLayer(
-  ref: RefObject<View | null>,
-  renderInContext = false,
-): Promise<string> {
+export async function captureStickerLayer(ref: RefObject<View | null>): Promise<string> {
   return toFileUri(
     await captureRef(ref, {
       format: 'png',
@@ -33,4 +30,9 @@ export async function captureStickerLayer(
       result: 'tmpfile',
     }),
   );
+}
+
+// A quick screen-resolution still: the on-screen stand-in while an export changes the story.
+export async function captureScreenStill(ref: RefObject<View | null>): Promise<string> {
+  return toFileUri(await captureRef(ref, { format: 'jpg', quality: 0.8, result: 'tmpfile' }));
 }

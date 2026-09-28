@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text } from 'react-native';
 import { strings } from '@/i18n/es';
 import type { AuthUser } from '@/services/auth/types';
@@ -11,10 +12,15 @@ type Props = {
 };
 
 export function userInitial(user: AuthUser | null): string {
-  return (user?.name ?? user?.email ?? 'S').trim().charAt(0).toUpperCase() || 'S';
+  // By code point, so a name that starts with an emoji keeps the whole glyph.
+  return Array.from((user?.name ?? user?.email ?? 'S').trim())[0]?.toUpperCase() || 'S';
 }
 
 export function AccountButton({ user, onPress }: Props) {
+  // Keyed by URL rather than a flag, so switching accounts shows the new user's avatar again.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const avatarUrl = user?.avatarUrl && user.avatarUrl !== failedUrl ? user.avatarUrl : null;
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -23,8 +29,8 @@ export function AccountButton({ user, onPress }: Props) {
       hitSlop={6}
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}
     >
-      {user?.avatarUrl ? (
-        <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+      {avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={styles.avatar} onError={() => setFailedUrl(avatarUrl)} />
       ) : (
         <Text style={styles.initial}>{userInitial(user)}</Text>
       )}

@@ -42,11 +42,12 @@ async function fetchAccentColor(url: string): Promise<string | null> {
 }
 
 export async function fetchAppleMusicMetadata(rawUrl: string): Promise<TrackMetadata> {
-  const url = toHttps(rawUrl)
-    .split('&')[0]
-    .replace(/[?&]uo=\d+/, '');
-  const { country, id } = parseIds(url);
+  const fullUrl = toHttps(rawUrl);
+  // Read the ids before cleaning: the song id (i=) can come after tracking params like uo=.
+  const { country, id } = parseIds(fullUrl);
   if (!id) throw new Error(strings.errors.appleSongNotFound);
+  const songId = fullUrl.match(SONG_QUERY_PATTERN)?.[1];
+  const url = fullUrl.split(/[?#]/)[0] + (songId ? `?i=${songId}` : '');
 
   const [lookup, accentColor] = await Promise.all([
     fetchWithTimeout(`https://itunes.apple.com/lookup?id=${id}&country=${country}`).then((r) => r.json()),

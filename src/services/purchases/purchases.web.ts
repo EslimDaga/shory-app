@@ -1,9 +1,8 @@
 import type { CustomerInfo } from 'react-native-purchases';
 
 // No App Store on web: everyone there uses the free plan.
-export const PRO_ENTITLEMENT = 'pro';
 export const purchasesAvailable = false;
-export type PlanPeriod = 'monthly' | 'annual';
+type PlanPeriod = 'monthly' | 'annual';
 export type Plan = {
   period: PlanPeriod;
   price: string;
@@ -18,15 +17,9 @@ export type ServerPlan = {
   willRenew: boolean;
 };
 export class PurchaseCancelledError extends Error {}
-export class StoreError extends Error {
-  constructor(
-    message: string,
-    readonly code: string | null,
-  ) {
-    super(message);
-  }
-}
+export class StoreError extends Error {}
 export const startPurchases = async (_userId: string) => {};
+export const ensureUser = async (_userId: string) => {};
 export const stopPurchases = async () => {};
 export const hasPro = (_info: CustomerInfo | null) => false;
 export const listenToCustomerInfo = (_onChange: (info: CustomerInfo) => void) => () => {};

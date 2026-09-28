@@ -78,6 +78,8 @@ export function readData<T extends WidgetData>(defaults: T, data: WidgetData | u
 }
 
 export function toNumber(value: string, fallback = 0): number {
+  // Number('') is 0, so text without a single digit ('N/A') would otherwise read as zero.
+  if (!/\d/.test(value)) return fallback;
   const parsed = Number(
     value
       .replace(/[^\d.,-]/g, '')
@@ -85,8 +87,4 @@ export function toNumber(value: string, fallback = 0): number {
       .replace(',', '.'),
   );
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-export function formatThousands(value: number): string {
-  return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }

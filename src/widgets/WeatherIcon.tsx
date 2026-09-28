@@ -25,8 +25,6 @@ const ICONS: Record<WeatherCondition, ComponentType<IconProps>> = {
   nightPartly: CloudMoon,
 };
 
-export const WEATHER_CONDITIONS = Object.keys(ICONS) as WeatherCondition[];
-
 // Filled, single-color glyphs in the widget's text color, like the system weather widget.
 export function WeatherIcon({
   condition,

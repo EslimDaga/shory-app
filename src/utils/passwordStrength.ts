@@ -1,4 +1,4 @@
-export const MIN_PASSWORD_LENGTH = 8;
+const MIN_PASSWORD_LENGTH = 8;
 
 export type PasswordRequirement = 'length' | 'mixedCase' | 'number' | 'symbol';
 
@@ -9,7 +9,8 @@ export type PasswordStrength = {
 
 const CHECKS: { id: PasswordRequirement; test: (password: string) => boolean }[] = [
   { id: 'length', test: (password) => password.length >= MIN_PASSWORD_LENGTH },
-  { id: 'mixedCase', test: (password) => /[a-zà-ÿ]/.test(password) && /[A-ZÀ-Þ]/.test(password) },
+  // ASCII only, like the server's required characters: an accented letter doesn't count as either case.
+  { id: 'mixedCase', test: (password) => /[a-z]/.test(password) && /[A-Z]/.test(password) },
   { id: 'number', test: (password) => /\d/.test(password) },
   { id: 'symbol', test: (password) => /[^A-Za-zÀ-ÖØ-öø-ÿ0-9\s]/.test(password) },
 ];

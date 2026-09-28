@@ -23,6 +23,9 @@ export type FootballMatch = {
   awayScore: number | null;
 };
 
+// Same deadline as fetchWithTimeout: without one, a stalled network keeps Sync spinning for ~60 s.
+const TIMEOUT_MS = 10_000;
+
 async function call<T>(body: Record<string, unknown>): Promise<T> {
   let supabase;
   try {
@@ -30,7 +33,7 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
   } catch {
     throw new Error(strings.widgets.live.failed);
   }
-  const { data, error } = await supabase.functions.invoke<T>('football', { body });
+  const { data, error } = await supabase.functions.invoke<T>('football', { body, timeout: TIMEOUT_MS });
   // 402: the server only serves live football to Shory Pro accounts.
   const status = (error as { context?: { status?: number } } | null)?.context?.status;
   if (status === 402) throw new Error(strings.widgets.live.proRequired);

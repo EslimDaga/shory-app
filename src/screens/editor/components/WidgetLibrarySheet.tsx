@@ -68,7 +68,7 @@ export function WidgetLibrarySheet({
             <Pressable
               key={id}
               accessibilityRole="button"
-              accessibilityState={{ selected: active }}
+              aria-selected={active}
               onPress={() => setFilter(id)}
               style={[styles.filter, active && styles.filterActive]}
             >
@@ -82,12 +82,14 @@ export function WidgetLibrarySheet({
         <View style={styles.grid}>
           {visibleWidgets.map((widget) => {
             const active = widget.id === selectedId;
+            const locked = widget.pro && !isPro;
+            const label = strings.editor.widgetOption(widget.name);
             return (
               <Pressable
                 key={widget.id}
                 accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                accessibilityLabel={strings.editor.widgetOption(widget.name)}
+                aria-selected={active}
+                accessibilityLabel={locked ? strings.paywall.proLockedOption(label) : label}
                 onPress={() => onSelect(widget)}
                 style={({ pressed }) => [{ width: cardWidth }, pressed && styles.pressed]}
               >
@@ -100,7 +102,7 @@ export function WidgetLibrarySheet({
                     height={cardHeight - 3}
                     padding={10}
                   />
-                  {widget.pro && !isPro ? (
+                  {locked ? (
                     <ProBadge style={styles.badge} />
                   ) : (
                     widget.isNew && (

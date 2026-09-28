@@ -1,3 +1,5 @@
+export const videoRecordingSupported = false;
+
 export class RecordingCancelledError extends Error {}
 
 export async function recordView(): Promise<string> {

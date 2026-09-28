@@ -24,16 +24,22 @@ test.describe('Onboarding', () => {
     await expect(await privacy).toHaveURL('https://shory.test/privacy');
   });
 
-  test('flujo completo: fuente → cómo funciona → crear cuenta, guardando la fuente elegida', async ({ page }) => {
+  test('flujo completo: fuente → cómo funciona → crear cuenta, guardando la fuente elegida', async ({
+    page,
+  }) => {
     await page.getByRole('button', { name: 'Empezar' }).click();
 
     await expect(page.getByRole('heading', { name: '¿Dónde escuchas música?' })).toBeVisible();
+    await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '33');
     for (const source of ['Spotify', 'YouTube Music', 'Apple Music', 'Uso varias']) {
-      await expect(page.getByRole('button', { name: source, exact: true })).toBeVisible();
+      const row = page.getByRole('button', { name: source, exact: true });
+      await expect(row).toBeVisible();
+      await expect(row).toHaveAttribute('aria-selected', 'false');
     }
     await page.getByRole('button', { name: 'Apple Music', exact: true }).click();
 
     await expect(page.getByRole('heading', { name: 'Así de fácil' })).toBeVisible();
+    await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '67');
     await expect.poll(() => storedPreferredSource(page)).toBe('apple-music');
     await page.getByRole('button', { name: 'Continuar' }).click();
 
@@ -49,6 +55,21 @@ test.describe('Onboarding', () => {
     expect(await storedPreferredSource(page)).toBeNull();
   });
 
+  for (const choice of ['Saltar', 'Uso varias']) {
+    test(`"${choice}" después de volver borra la fuente elegida antes`, async ({ page }) => {
+      await page.getByRole('button', { name: 'Empezar' }).click();
+      await page.getByRole('button', { name: 'Spotify', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Así de fácil' })).toBeVisible();
+      await expect.poll(() => storedPreferredSource(page)).toBe('spotify');
+
+      await page.getByRole('button', { name: 'Atrás' }).click();
+      await page.getByRole('button', { name: choice, exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Así de fácil' })).toBeVisible();
+      // The removal is async.
+      await expect.poll(() => storedPreferredSource(page)).toBeNull();
+    });
+  }
+
   test('"Atrás" regresa paso a paso hasta la bienvenida', async ({ page }) => {
     await page.getByRole('button', { name: 'Empezar' }).click();
     await page.getByRole('button', { name: 'Spotify', exact: true }).click();
@@ -56,8 +77,16 @@ test.describe('Onboarding', () => {
 
     await page.getByRole('button', { name: 'Atrás' }).click();
     await expect(page.getByRole('heading', { name: '¿Dónde escuchas música?' })).toBeVisible();
-    // Going back keeps the previous choice.
+    // Going back keeps the previous choice, stored and shown.
     expect(await storedPreferredSource(page)).toBe('spotify');
+    await expect(page.getByRole('button', { name: 'Spotify', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('button', { name: 'Apple Music', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    );
 
     await page.getByRole('button', { name: 'Atrás' }).click();
     await expect(page.getByRole('button', { name: 'Empezar' })).toBeVisible();

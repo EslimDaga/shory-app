@@ -4,7 +4,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 // app after buying), the state is re-read from RevenueCat's API with the secret key, never taken
 // from the caller.
 const REVENUECAT_SECRET_KEY = Deno.env.get('REVENUECAT_SECRET_KEY');
-export const PRO_ENTITLEMENT = 'pro';
+const PRO_ENTITLEMENT = 'pro';
 
 export type Subscription = {
   plan: 'free' | 'pro';
@@ -45,7 +45,7 @@ async function fetchSubscriber(userId: string): Promise<Subscriber> {
   return subscriber;
 }
 
-export function toSubscription(subscriber: Subscriber, now = Date.now()): Subscription {
+function toSubscription(subscriber: Subscriber, now = Date.now()): Subscription {
   const entitlement = subscriber.entitlements[PRO_ENTITLEMENT];
   // A billing grace period keeps Pro on while Apple retries the payment.
   const until = entitlement?.grace_period_expires_date ?? entitlement?.expires_date ?? null;
@@ -73,6 +73,7 @@ export async function refreshSubscription(db: SupabaseClient, userId: string): P
     will_renew: subscription.willRenew,
     updated_at: new Date().toISOString(),
   });
-  if (error) throw new Error(`subscriptions upsert failed: ${error.message}`);
+  // 23503 (foreign key): the account was deleted meanwhile, so there is no row to keep.
+  if (error && error.code !== '23503') throw new Error(`subscriptions upsert failed: ${error.message}`);
   return subscription;
 }

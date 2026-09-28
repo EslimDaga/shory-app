@@ -59,7 +59,7 @@ type ForecastResponse = {
 };
 
 // WMO weather interpretation codes → the widget's drawn conditions.
-export function conditionFromCode(code: number, isDay: boolean): WeatherCondition {
+function conditionFromCode(code: number, isDay: boolean): WeatherCondition {
   if (code >= 95) return 'storm';
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
   if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';

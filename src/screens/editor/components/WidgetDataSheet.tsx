@@ -89,7 +89,7 @@ function Field({
               <Pressable
                 key={choice.id}
                 accessibilityRole="button"
-                accessibilityState={{ selected: active }}
+                aria-selected={active}
                 onPress={() => onChange(choice.id)}
                 style={[styles.choice, active && styles.choiceActive]}
               >

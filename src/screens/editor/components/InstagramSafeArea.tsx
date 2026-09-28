@@ -80,7 +80,9 @@ export function InstagramSafeArea({ visible, width, height, name, avatarUrl }: P
           {avatarUrl ? (
             <Image source={{ uri: avatarUrl }} style={StyleSheet.absoluteFill} />
           ) : (
-            <Text style={[styles.initial, { fontSize: avatar * 0.42 }]}>{name.charAt(0).toUpperCase()}</Text>
+            <Text style={[styles.initial, { fontSize: avatar * 0.42 }]}>
+              {Array.from(name.trim())[0]?.toUpperCase() ?? ''}
+            </Text>
           )}
         </View>
         <Text style={[styles.name, { fontSize: unit * 3.6 }]} numberOfLines={1}>

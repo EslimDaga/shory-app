@@ -1,8 +1,6 @@
 import Svg, { Path } from 'react-native-svg';
 
-type Props = { size?: number; color?: string };
-
-export function AppleLogo({ size = 20, color = '#FFFFFF' }: Props) {
+export function AppleLogo({ size = 20, color = '#FFFFFF' }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Path
@@ -13,7 +11,8 @@ export function AppleLogo({ size = 20, color = '#FFFFFF' }: Props) {
   );
 }
 
-export function GoogleLogo({ size = 20 }: Props) {
+// Google's mark is always drawn in its own four colors.
+export function GoogleLogo({ size = 20 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="4 4 40 40">
       <Path

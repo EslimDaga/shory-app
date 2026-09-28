@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
@@ -37,12 +37,27 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 export function SourceStepScreen({ progress, selected, onBack, onSelect }: Props) {
   const insets = useSafeAreaInsets();
   const [picked, setPicked] = useState<Choice | null>(null);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Back (on screen or hardware) unmounts this step; a pending advance must not push 'how' after it.
+  useEffect(
+    () => () => {
+      if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    },
+    [],
+  );
 
   const choose = (choice: Choice) => {
     if (picked) return;
     hapticSelection();
     setPicked(choice);
-    setTimeout(() => onSelect(choice === 'several' ? null : choice), ADVANCE_DELAY_MS);
+    advanceTimer.current = setTimeout(() => onSelect(choice === 'several' ? null : choice), ADVANCE_DELAY_MS);
+  };
+
+  const skip = () => {
+    // A picked row is already advancing; skipping too would push 'how' twice.
+    if (picked) return;
+    onSelect(null);
   };
 
   const choices: { choice: Choice; label: string; icon: ReactNode }[] = [
@@ -68,7 +83,7 @@ export function SourceStepScreen({ progress, selected, onBack, onSelect }: Props
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }]}>
-      <OnboardingHeader onBack={onBack} progress={progress} onSkip={() => onSelect(null)} />
+      <OnboardingHeader onBack={onBack} progress={progress} onSkip={skip} />
       <View style={styles.titleBlock}>
         <KineticText text={strings.onboarding.sourceTitle} style={styles.title} delay={120} />
       </View>
@@ -130,7 +145,7 @@ function OptionRow({
     <Animated.View entering={riseIn(ROWS_DELAY_MS + index * ROW_STAGGER_MS)}>
       <AnimatedPressable
         accessibilityRole="button"
-        accessibilityState={{ selected: active }}
+        aria-selected={active}
         onPress={handlePress}
         onPressIn={() => {
           press.set(withSpring(0.96, { damping: 30, stiffness: 400 }));

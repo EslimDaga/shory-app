@@ -15,7 +15,7 @@ export async function isAppleAuthAvailable(): Promise<boolean> {
   }
 }
 
-export async function requestAppleCredential() {
+async function requestAppleCredential() {
   const rawNonce = Crypto.randomUUID();
   const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
   try {
@@ -61,8 +61,13 @@ export async function signInWithApple() {
   });
   if (error) throw error;
 
+  // Apple sends the name only on the first authorization. The updated user is returned, not the one
+  // from the sign-in, which has no name and would overwrite the right one in the app.
   if (fullName && !data.user.user_metadata?.full_name) {
-    await supabase.auth.updateUser({ data: { full_name: fullName } });
+    const { data: updated, error: updateError } = await supabase.auth.updateUser({
+      data: { full_name: fullName },
+    });
+    if (!updateError && updated.user) return updated.user;
   }
   return data.user;
 }

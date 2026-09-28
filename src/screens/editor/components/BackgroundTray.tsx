@@ -30,7 +30,8 @@ type Props = {
   // Colors extracted from the cover and the chosen photo, offered first as "Magic" swatches.
   magicColors: string[];
   onPickPhoto: (source: PhotoSource) => void;
-  onPickVideo: () => void;
+  // Left out where a video background isn't available, which hides its tile.
+  onPickVideo?: () => void;
   onSelectGradient: (background: GradientBackground) => void;
   onRandom: () => void;
   onOpenColorPicker: () => void;
@@ -60,9 +61,11 @@ export function BackgroundTray({
       <IconTile label={strings.editor.takePhoto} onPress={() => onPickPhoto('camera')}>
         <CameraIcon />
       </IconTile>
-      <IconTile label={strings.editor.pickVideo} onPress={onPickVideo}>
-        <VideoIcon />
-      </IconTile>
+      {onPickVideo && (
+        <IconTile label={strings.editor.pickVideo} onPress={onPickVideo}>
+          <VideoIcon />
+        </IconTile>
+      )}
       {magicColors.length > 0 && (
         <>
           <View style={styles.divider} />
@@ -74,13 +77,13 @@ export function BackgroundTray({
           >
             <SparkleIcon size={16} color={editorColors.accent} />
           </View>
-          {magicColors.map((color) => {
+          {magicColors.map((color, index) => {
             const magic = createMagicBackground(color);
             return (
               <GradientSwatch
                 key={magic.id}
                 gradient={magic}
-                label={strings.editor.magicColor(color)}
+                label={strings.editor.magicColor(index + 1)}
                 active={selected.kind === 'gradient' && selected.id === magic.id}
                 onPress={() => onSelectGradient(magic)}
               />
@@ -120,7 +123,7 @@ export function BackgroundTray({
 function swatchLabel(id: string): string {
   if (id === AUTO_BACKGROUND_ID) return strings.editor.autoColor;
   if (id === CUSTOM_BACKGROUND_ID) return strings.editor.customColorSwatch;
-  return strings.editor.backgroundPreset(id);
+  return strings.editor.backgroundPreset(strings.editor.backgroundPresetNames[id] ?? id);
 }
 
 function IconTile({ label, onPress, children }: { label: string; onPress: () => void; children: ReactNode }) {
@@ -168,7 +171,7 @@ function GradientSwatch({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
+      aria-selected={active}
       onPress={onPress}
       style={({ pressed }) => [styles.swatch, active && styles.active, pressed && styles.pressed]}
     >

@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
-import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
+import { BackHandler, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CloseIcon } from '@/components/Icons';
@@ -12,10 +12,11 @@ import { strings } from '@/i18n/es';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSubscription } from '@/providers/SubscriptionProvider';
 import { pickPhoto, pickVideo, type PhotoSource } from '@/services/media/photoLibrary';
+import { deleteFile } from '@/services/media/tempFiles';
 import { editorColors } from '@/theme/colors';
 import { STORY_ASPECT } from '@/theme/layout';
 import { DEFAULT_TEMPLATE_DEVICE } from '@/templates/registry';
-import { describeVideo } from 'shory-recorder';
+import { describeVideo, videoRecordingSupported } from 'shory-recorder';
 import type { TemplateContent, TemplateDefinition } from '@/templates/types';
 import type { TrackMetadata } from '@/types/music';
 import { stillBackground, type GradientBackground, type StoryBackground } from '@/types/storyBackground';
@@ -28,7 +29,7 @@ import { COUNTRY_KEY } from '@/widgets/WeatherCardWidget';
 import { HOURLY_KEY } from '@/widgets/WeatherWidget';
 import { BackgroundTray } from './components/BackgroundTray';
 import { BottomBar } from './components/BottomBar';
-import { StoryClockProvider } from '@/components/motion/StoryClock';
+import { StoryClockProvider, type StoryClockHandle } from '@/components/motion/StoryClock';
 import { VIDEO_FPS } from '@/services/media/videoExport';
 import { TEMPLATE_SECONDS } from '@/templates/templateClock';
 import { ColorPickerSheet } from './components/ColorPickerSheet';
@@ -87,18 +88,25 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
   const [templateSheetOpen, setTemplateSheetOpen] = useState(false);
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [clock, setClock] = useState<number | null>(null);
   const [format, setFormat] = useState<ExportFormat>('photo');
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({ width: 0, height: 0 });
-  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [toast, setToast] = useState<(ToastMessage & { id: number }) | null>(null);
+  // A new id per message: the same text twice in a row still shows again, for its full time.
+  const toastId = useRef(0);
 
-  const showMessage = useCallback((text: string, isError = false) => setToast({ text, isError }), []);
+  const showMessage = useCallback(
+    (text: string, isError = false) => setToast({ text, isError, id: ++toastId.current }),
+    [],
+  );
   const hideToast = useCallback(() => setToast(null), []);
 
   const { user } = useAuth();
   const { isPro, requirePro, openPaywall } = useSubscription();
   const paywallAfterLibrary = useRef(false);
   const canvasRef = useRef<StoryCanvasHandle>(null);
+  const clockRef = useRef<StoryClockHandle>(null);
+  // Video posters this screen wrote to the temporary directory, deleted once nothing shows them.
+  const posters = useRef(new Set<string>());
   const configFor = (target: WidgetDefinition) => configs[target.id] ?? defaultConfigFor(target);
   const config = configFor(widget);
   const userName = user?.name ?? user?.email?.split('@')[0] ?? strings.editor.safeArea.defaultName;
@@ -114,10 +122,11 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
   const templateContent = template ? contentFor(template) : null;
   const backgroundVideo = background.kind === 'video' ? background.uri : null;
   // How long the video export (and the preview loop) runs: a background clip sets the length, up
-  // to what reads well in a story; otherwise the template's or the widget's standard length.
+  // to what reads well in a story; otherwise the template's or the widget's standard length. The
+  // clip's exact length, not rounded up: a longer story would restart the clip for its last frames.
   const storySeconds =
     background.kind === 'video'
-      ? Math.min(MAX_CLIP_SECONDS, Math.max(MIN_CLIP_SECONDS, Math.round(background.durationSeconds)))
+      ? Math.min(MAX_CLIP_SECONDS, Math.max(MIN_CLIP_SECONDS, background.durationSeconds))
       : template
         ? TEMPLATE_SECONDS
         : STORY_VIDEO_SECONDS;
@@ -140,7 +149,7 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
   } = useStoryExport({
     track,
     canvasRef,
-    setClock,
+    setClock: (seconds) => clockRef.current?.setTime(seconds),
     templateActive: template !== null,
     watermark: !isPro,
     backgroundVideo,
@@ -158,6 +167,37 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
     onExported,
     onMessage: showMessage,
   });
+
+  const posterInUse = background.kind === 'video' ? background.posterUri : null;
+  useEffect(() => {
+    for (const uri of posters.current) {
+      if (uri === posterInUse || uri === lastPhoto) continue;
+      deleteFile(uri);
+      posters.current.delete(uri);
+    }
+  }, [posterInUse, lastPhoto]);
+
+  useEffect(() => {
+    const written = posters.current;
+    return () => {
+      for (const uri of written) deleteFile(uri);
+      written.clear();
+    };
+  }, []);
+
+  // Android's back button steps back like the on-screen controls: out of an export, then out of
+  // an open tray, then out of the editor. Open sheets are modals and handle it themselves.
+  const onHardwareBack = useEffectEvent(() => {
+    if (videoExport) cancelVideo();
+    else if (activeTool) setActiveTool(null);
+    else onClose();
+    return true;
+  });
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => onHardwareBack());
+    return () => subscription.remove();
+  }, []);
 
   const onStageLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -202,6 +242,7 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
         posterUri: null,
         durationSeconds: STORY_VIDEO_SECONDS,
       }));
+      if (posterUri) posters.current.add(posterUri);
       changeBackground({ kind: 'video', uri, posterUri, durationSeconds });
       if (posterUri) setLastPhoto(posterUri);
       setFormat('video');
@@ -216,8 +257,9 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
     changeBackground(next);
   };
 
-  const updateConfig = (patch: Partial<WidgetConfig>) => {
-    hapticSelection();
+  // `haptic`: false for continuous changes (a slider drag), which would otherwise buzz on every move.
+  const updateConfig = (patch: Partial<WidgetConfig>, haptic = true) => {
+    if (haptic) hapticSelection();
     setConfigs((current) => ({ ...current, [widget.id]: { ...configFor(widget), ...patch } }));
   };
 
@@ -249,12 +291,12 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
   };
 
   // Templates are made to move, so picking one switches the export to video (a Pro feature: on
-  // the free plan a template exports as a photo).
+  // the free plan, or where video can't be recorded, a template exports as a photo).
   const selectTemplate = (next: TemplateDefinition | null) => {
     hapticSelection();
     if (next?.pro && !requirePro('template')) return;
     setTemplate(next);
-    if (next && isPro) setFormat('video');
+    if (next && isPro && videoRecordingSupported) setFormat('video');
   };
 
   const TemplateComponent = template?.Component;
@@ -311,7 +353,7 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
       <View style={styles.stage} onLayout={onStageLayout}>
         {canvasSize.width > 0 && (
           <View style={canvasSize}>
-            <StoryClockProvider time={clock} loopSeconds={previewLoopSeconds} fps={VIDEO_FPS}>
+            <StoryClockProvider ref={clockRef} loopSeconds={previewLoopSeconds} fps={VIDEO_FPS}>
               <StoryCanvas
                 width={canvasSize.width}
                 height={canvasSize.height}
@@ -351,11 +393,16 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
                   <CloseIcon size={20} />
                 </GlassButton>
 
-                <ToolRail activeTool={activeTool} onToggle={toggleTool} compact={template !== null} />
+                <ToolRail
+                  activeTool={activeTool}
+                  expandedTool={templateSheetOpen ? 'customize' : null}
+                  onToggle={toggleTool}
+                  compact={template !== null}
+                />
               </>
             )}
 
-            {toast && <Toast {...toast} onHidden={hideToast} />}
+            {toast && <Toast key={toast.id} text={toast.text} isError={toast.isError} onHidden={hideToast} />}
 
             {!dragging && activeTool === 'background' && (
               <BackgroundTray
@@ -364,7 +411,8 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
                 selected={background}
                 magicColors={magicColors}
                 onPickPhoto={choosePhoto}
-                onPickVideo={chooseVideo}
+                // Video needs the native recorder (iOS only): elsewhere a clip couldn't be exported.
+                onPickVideo={videoRecordingSupported ? chooseVideo : undefined}
                 onSelectGradient={(gradient) => {
                   hapticSelection();
                   changeBackground(gradient);
@@ -422,15 +470,18 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
         )}
       </View>
 
-      <FormatToggle
-        value={exportFormat}
-        disabled={pendingAction !== null || backgroundVideo !== null}
-        onChange={(next) => {
-          hapticSelection();
-          if (next === 'video' && !requirePro('video')) return;
-          setFormat(next);
-        }}
-      />
+      {/* Without the native recorder (Android, web) photo is the only format, so there's no choice. */}
+      {videoRecordingSupported && (
+        <FormatToggle
+          value={exportFormat}
+          disabled={pendingAction !== null || backgroundVideo !== null}
+          onChange={(next) => {
+            hapticSelection();
+            if (next === 'video' && !requirePro('video')) return;
+            setFormat(next);
+          }}
+        />
+      )}
 
       <BottomBar
         background={still}
@@ -439,6 +490,7 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
         backgroundTrayOpen={activeTool === 'background'}
         onToggleBackgroundTray={() => toggleTool('background')}
         onShare={() => {
+          if (pendingAction) return;
           setActiveTool(null);
           if (!ensureProForExport()) return;
           setShareSheetOpen(true);
@@ -456,6 +508,8 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
         onClose={() => setShareSheetOpen(false)}
         onWithSong={async () => {
           setShareSheetOpen(false);
+          // A save started while the sheet was open: the share wouldn't run, so leave the clipboard.
+          if (pendingAction) return;
           // The song's name goes to the clipboard, ready to paste into Instagram's Music search.
           const shown = templateContent ?? { title: track.title, artist: track.artist ?? '' };
           const song = [shown.title, shown.artist].filter(Boolean).join(' - ');

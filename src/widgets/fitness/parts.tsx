@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { withAlpha } from '@/utils/color';
+import { useSvgId } from '../svgId';
 import type { TonePalette } from '../tonePalette';
 
 // Building blocks shared by the fitness widgets, drawn after the Fitness Widget Pack (Figma
@@ -241,14 +242,13 @@ export function Sparkline({
   values,
   width,
   height,
-  id,
 }: {
   palette: TonePalette;
   values: number[];
   width: number;
   height: number;
-  id: string;
 }) {
+  const gradientId = useSvgId('spark');
   const pad = 5;
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -260,7 +260,6 @@ export function Sparkline({
   const line = smoothPath(points);
   const last = points[points.length - 1];
   const area = `${line} L ${last.x} ${height} L ${points[0].x} ${height} Z`;
-  const gradientId = `spark-${id}`;
   return (
     <Svg width={width} height={height}>
       <Defs>

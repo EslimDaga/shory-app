@@ -5,7 +5,8 @@ import { buildPalette } from '@/utils/palette';
 const SAMPLE_SIZE = 48;
 const PALETTE_SIZE = 6;
 
-// Palettes don't change for a given image, so each one is computed once per session.
+// Palettes don't change for a given image, so each one is computed once per session. Only reads
+// that finished are kept: a failed one (offline, timeout) is tried again next time.
 const cache = new Map<string, string[]>();
 
 // The dominant colors of an image, most common first. Empty while loading or if it can't be read.
@@ -16,11 +17,13 @@ export function useImagePalette(uri: string | null): string[] {
     if (!uri || cache.has(uri)) return;
     let active = true;
     samplePixels(uri, SAMPLE_SIZE)
-      .then((pixels) => buildPalette(pixels, PALETTE_SIZE))
-      .catch(() => [])
-      .then((colors) => {
+      .then((pixels) => {
+        const colors = buildPalette(pixels, PALETTE_SIZE);
         cache.set(uri, colors);
         if (active) setResult({ uri, colors });
+      })
+      .catch(() => {
+        if (active) setResult({ uri, colors: [] });
       });
     return () => {
       active = false;

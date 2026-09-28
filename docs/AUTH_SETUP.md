@@ -60,7 +60,7 @@ Ya aplicado con `SUPABASE_ACCESS_TOKEN=<token> scripts/supabase/harden-auth.sh` 
 3. **Secure email change** y **Secure password change**: activados.
 4. **CAPTCHA** (opcional, Authentication → Attack Protection): hCaptcha o Turnstile si ves registros masivos.
 
-La app además frena intentos repetidos por su lado (`src/services/auth/attemptLimiter.ts`): tras 5 fallos en 15 min bloquea ese correo 30 s, y el bloqueo se duplica hasta 15 min. Reenviar el código o el correo de recuperación tiene 60 s de espera. Esto es solo UX: la protección real contra fuerza bruta son los rate limits del servidor.
+La app además frena intentos repetidos por su lado (`src/services/auth/attemptLimiter.ts`): permite 5 fallos en 15 min y al 6.º bloquea ese correo 30 s, y el bloqueo se duplica hasta 15 min. Reenviar el código o el correo de recuperación tiene 60 s de espera. Esto es solo UX: la protección real contra fuerza bruta son los rate limits del servidor.
 
 ## 2. Apple
 

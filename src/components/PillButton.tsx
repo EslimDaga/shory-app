@@ -13,7 +13,6 @@ type Props = {
   iconPlacement?: 'inline' | 'leading';
   loading?: boolean;
   disabled?: boolean;
-  accessibilityLabel?: string;
 };
 
 const VARIANTS = {
@@ -33,15 +32,15 @@ export function PillButton({
   iconPlacement = 'inline',
   loading = false,
   disabled = false,
-  accessibilityLabel,
 }: Props) {
   const colors = VARIANTS[variant];
   const inactive = disabled || loading;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ disabled: inactive, busy: loading }}
+      accessibilityLabel={label}
+      // `disabled` already reports the disabled state on every platform.
+      aria-busy={loading}
       disabled={inactive}
       onPress={onPress}
       style={({ pressed }) => [

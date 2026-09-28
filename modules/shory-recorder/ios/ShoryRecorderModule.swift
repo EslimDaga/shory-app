@@ -3,11 +3,11 @@ import CoreImage
 import ExpoModulesCore
 import UIKit
 
-private final class RecorderNotStartedException: Exception {
+private final class RecorderNotStartedException: Exception, @unchecked Sendable {
   override var reason: String { "The recorder has not been started" }
 }
 
-private final class RecorderFailedException: GenericException<String> {
+private final class RecorderFailedException: GenericException<String>, @unchecked Sendable {
   override var reason: String { "Video recording failed: \(param)" }
 }
 
@@ -46,10 +46,13 @@ public final class ShoryRecorderModule: Module {
       return ["posterUri": posterURL.absoluteString, "durationSeconds": CMTimeGetSeconds(duration)]
     }
 
-    AsyncFunction("start") { (width: Int, height: Int, fps: Int, backgroundVideo: String?) -> String in
+    AsyncFunction("start") { (width: Int, height: Int, fps: Int, backgroundVideo: String?) async throws -> String in
       self.reset()
       // Opened first: a clip that can't be read fails the export before any file is written.
-      let background = try backgroundVideo.flatMap(URL.init(string:)).map(BackgroundVideo.init(url:))
+      var background: BackgroundVideo?
+      if let url = backgroundVideo.flatMap(URL.init(string:)) {
+        background = try await BackgroundVideo(url: url)
+      }
       let url = FileManager.default.temporaryDirectory.appendingPathComponent("shory-\(UUID().uuidString).mp4")
       let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
       let settings: [String: Any] = [
@@ -92,7 +95,9 @@ public final class ShoryRecorderModule: Module {
     }
 
     AsyncFunction("appendView") { (view: UIView, index: Int) in
-      guard let input = self.input, let adaptor = self.adaptor, let pool = adaptor.pixelBufferPool else {
+      guard let writer = self.writer, let input = self.input, let adaptor = self.adaptor,
+        let pool = adaptor.pixelBufferPool
+      else {
         throw RecorderNotStartedException()
       }
       var buffer: CVPixelBuffer?
@@ -100,8 +105,9 @@ public final class ShoryRecorderModule: Module {
       guard let pixelBuffer = buffer else { throw RecorderFailedException("no pixel buffer") }
 
       let seconds = Double(index) / Double(self.fps)
-      if let frame = self.background?.frame(at: seconds) {
-        self.ciContext.render(self.aspectFill(frame), to: pixelBuffer)
+      let backgroundFrame = try self.background?.frame(at: seconds)
+      if let backgroundFrame {
+        self.ciContext.render(self.aspectFill(backgroundFrame), to: pixelBuffer)
       }
 
       CVPixelBufferLockBaseAddress(pixelBuffer, [])
@@ -117,7 +123,8 @@ public final class ShoryRecorderModule: Module {
         CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
         throw RecorderFailedException("no drawing context")
       }
-      if self.background == nil {
+      // Pooled buffers come back holding an older frame: wipe it unless the background covered it.
+      if backgroundFrame == nil {
         context.clear(CGRect(origin: .zero, size: self.size))
       }
       // UIKit draws top-down and in points; flip and scale the bitmap context to match, so the
@@ -130,14 +137,21 @@ public final class ShoryRecorderModule: Module {
       UIGraphicsPopContext()
       CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
 
+      // Appending to an input that isn't ready raises an Objective-C exception (a crash), so fail
+      // with an error instead. A writer that stopped (e.g. interrupted while the app was in the
+      // background) never gets ready again: fail at once rather than blocking the UI thread.
       var waited = 0
-      while !input.isReadyForMoreMediaData && waited < 400 {
+      while !input.isReadyForMoreMediaData {
+        if writer.status != .writing {
+          throw RecorderFailedException(writer.error?.localizedDescription ?? "the video encoder stopped")
+        }
+        if waited >= 400 { throw RecorderFailedException("the video encoder is not ready") }
         Thread.sleep(forTimeInterval: 0.005)
         waited += 1
       }
       let time = CMTime(value: CMTimeValue(index), timescale: self.fps)
       if !adaptor.append(pixelBuffer, withPresentationTime: time) {
-        throw RecorderFailedException(self.writer?.error?.localizedDescription ?? "cannot append frame")
+        throw RecorderFailedException(writer.error?.localizedDescription ?? "cannot append frame")
       }
     }
     .runOnQueue(.main)
@@ -189,6 +203,7 @@ public final class ShoryRecorderModule: Module {
 // longer than the clip.
 private final class BackgroundVideo {
   private let asset: AVAsset
+  private let tracks: [AVAssetTrack]
   private let composition: AVVideoComposition
   private let duration: Double
   private var reader: AVAssetReader?
@@ -197,18 +212,23 @@ private final class BackgroundVideo {
   private var next: CMSampleBuffer?
   private var loopStart = 0.0
 
-  init(url: URL) throws {
+  init(url: URL) async throws {
     asset = AVURLAsset(url: url)
-    composition = AVMutableVideoComposition(propertiesOf: asset)
-    duration = CMTimeGetSeconds(asset.duration)
+    // Loaded once up front: the reader is reopened synchronously, mid-export, on every loop.
+    do {
+      duration = CMTimeGetSeconds(try await asset.load(.duration))
+      tracks = try await asset.loadTracks(withMediaType: .video)
+      composition = try await AVVideoComposition.videoComposition(withPropertiesOf: asset)
+    } catch {
+      throw RecorderFailedException(error.localizedDescription)
+    }
     guard duration > 0 else { throw RecorderFailedException("the background video is empty") }
+    guard !tracks.isEmpty else { throw RecorderFailedException("the background video has no video track") }
     try openReader()
   }
 
   private func openReader() throws {
     let reader = try AVAssetReader(asset: asset)
-    let tracks = asset.tracks(withMediaType: .video)
-    guard !tracks.isEmpty else { throw RecorderFailedException("the background video has no video track") }
     let output = AVAssetReaderVideoCompositionOutput(
       videoTracks: tracks,
       videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
@@ -216,18 +236,21 @@ private final class BackgroundVideo {
     output.videoComposition = composition
     output.alwaysCopiesSampleData = false
     reader.add(output)
-    reader.startReading()
+    guard reader.startReading() else {
+      throw RecorderFailedException(reader.error?.localizedDescription ?? "cannot read the background video")
+    }
     self.reader = reader
     self.output = output
     next = output.copyNextSampleBuffer()
   }
 
-  func frame(at seconds: Double) -> CIImage? {
+  func frame(at seconds: Double) throws -> CIImage? {
     var local = seconds - loopStart
     if local >= duration {
       loopStart += duration * floor(local / duration)
       local = seconds - loopStart
-      try? openReader()
+      // A clip that can't be reread fails the export rather than freezing or blanking the background.
+      try openReader()
       current = nil
     }
     while let sample = next, CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample)) <= local + 0.0001 {

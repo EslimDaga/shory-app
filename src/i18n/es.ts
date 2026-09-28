@@ -5,6 +5,7 @@ export const strings = {
     thisWeek: 'Esta semana',
     artists: 'Artistas',
     favorite: 'Favorito',
+    noFavorite: 'ninguno',
     howItWorks: 'Cómo funciona',
     openHelp: 'Ver cómo funciona',
     openAccount: 'Tu cuenta',
@@ -39,8 +40,6 @@ export const strings = {
       widget: 'Desbloquea el clima y el fútbol con datos reales.',
       template: 'Desbloquea todas las plantillas.',
       video: 'Desbloquea las historias en video 4K.',
-      watermark: 'Quita la marca de agua de tus historias.',
-      football: 'Desbloquea escudos y marcadores reales.',
       upgrade: 'Video 4K, widgets en vivo, todas las plantillas y sin marca de agua.',
     },
     benefits: {
@@ -79,7 +78,6 @@ export const strings = {
     failed: 'No se pudo completar la compra. Inténtalo de nuevo.',
     notActiveYet: 'Recibimos tu compra, pero Pro aún no se activa. Toca «Restaurar compras» en un momento.',
     welcome: {
-      badge: 'Ya eres Pro',
       purchaseTitle: '¡Bienvenido a\nShory Pro!',
       restoreTitle: 'Tu Pro está\nde vuelta.',
       purchaseBody: 'Todo está desbloqueado. Crea sin límites.',
@@ -95,9 +93,10 @@ export const strings = {
       inProgress: 'Ya hay una compra en curso. Espera un momento.',
     },
     proBadge: 'PRO',
+    // The PRO badge is only visual, so a locked option says it in its accessible name.
+    proLockedOption: (label: string) => `${label}, función Pro`,
   },
   account: {
-    title: 'Tu cuenta',
     signedInWith: (provider: string) => `Conectado con ${provider}`,
     anonymousName: 'Tu cuenta Shory',
     signOut: 'Cerrar sesión',
@@ -200,7 +199,6 @@ export const strings = {
       newPasswordTitle: 'Nueva contraseña',
       newPasswordBody: 'Elige una que no uses en otro lado.',
       newPasswordSave: 'Guardar contraseña',
-      newPasswordSaved: 'Listo, tu contraseña se actualizó.',
       validation: {
         name: 'Escribe tu nombre.',
         code: 'Escribe el código de 6 dígitos del correo.',
@@ -211,7 +209,7 @@ export const strings = {
         label: 'Seguridad de la contraseña',
         empty: 'Usa 8+ caracteres, mayúsculas, números y un símbolo.',
         needLength: 'Necesita al menos 8 caracteres.',
-        needMixedCase: 'Combina mayúsculas y minúsculas.',
+        needMixedCase: 'Combina mayúsculas y minúsculas sin acento (A-Z, a-z).',
         needNumber: 'Agrega al menos un número.',
         needSymbol: 'Agrega un símbolo, como ! o #.',
         strong: 'Contraseña segura.',
@@ -220,7 +218,8 @@ export const strings = {
         invalidCredentials: 'Email o contraseña incorrectos.',
         emailNotConfirmed: 'Primero confirma tu email con el enlace que te mandamos.',
         userExists: 'Ese email ya tiene cuenta. Inicia sesión con él.',
-        weakPassword: 'Esa contraseña es muy débil. Prueba una más larga.',
+        weakPassword:
+          'Esa contraseña es muy débil. Usa 8+ caracteres con mayúsculas y minúsculas sin acento y un número.',
         rateLimited: 'Demasiados intentos. Espera un momento.',
         tooManyAttempts: (seconds: number) =>
           seconds >= 60
@@ -236,6 +235,7 @@ export const strings = {
       googleNotConfigured: 'Falta EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID en .env.',
       noIdToken: (provider: string) => `${provider} no devolvió un token de acceso.`,
       deleteFailed: (reason: string) => `No se pudo eliminar la cuenta: ${reason}`,
+      appleDeleteNeedsIos: 'Tu cuenta está vinculada con Apple. Elimínala desde la app en un iPhone.',
     },
   },
   time: {
@@ -266,6 +266,7 @@ export const strings = {
       cover: 'Carátula',
       times: 'Tiempos',
       progressLabel: 'Posición de la canción',
+      empty: 'Este widget no tiene ajustes.',
       content: 'Datos',
     },
     tones: {
@@ -283,13 +284,24 @@ export const strings = {
     customColor: 'Elegir color',
     customColorSwatch: 'Tu color',
     magicColors: 'Colores de tu imagen',
-    magicColor: (hex: string) => `Color de tu imagen ${hex}`,
-    selected: 'seleccionado',
+    magicColor: (position: number) => `Color ${position} de tu imagen`,
     colorPickerTitle: 'Elige un color',
     colorPickerHue: 'Tono',
+    colorPickerBrightness: 'Brillo',
     colorPickerApply: 'Usar este color',
     colorPickerShuffle: 'Sorpréndeme',
-    backgroundPreset: (id: string) => `Fondo ${id}`,
+    backgroundPreset: (name: string) => `Fondo ${name}`,
+    // Spoken names for the preset gradients' ids (see GRADIENT_PRESETS).
+    backgroundPresetNames: {
+      night: 'Noche',
+      sunset: 'Atardecer',
+      ocean: 'Océano',
+      mint: 'Menta',
+      sand: 'Arena',
+      bubblegum: 'Chicle',
+      lime: 'Lima',
+      paper: 'Papel',
+    } as Record<string, string>,
     widgetOption: (name: string) => `Widget ${name}`,
     deviceBluetooth: 'Bluetooth',
     safeArea: {
@@ -386,7 +398,6 @@ export const strings = {
       },
       calories: {
         name: 'Calorías',
-        title: 'Calorías',
         unit: 'kcal',
         ofGoal: (goal: string) => `de ${goal} kcal quemadas`,
         fields: { kcal: 'Quemadas (kcal)', goal: 'Meta (kcal)' },
@@ -482,6 +493,7 @@ export const strings = {
       sync: 'Sincronizar datos',
       syncHint: 'Trae el marcador del partido entre estos equipos, si se está jugando o terminó hace poco.',
       syncNeedsTeams: 'Elige los dos equipos de la búsqueda para sincronizar el marcador.',
+      syncSameTeam: 'Elige dos equipos distintos para sincronizar el marcador.',
       noMatch: 'No encontré un partido reciente entre estos equipos. Pon el marcador a mano.',
       scheduled: 'Todavía no empieza: el marcador queda en blanco.',
       synced: 'Listo: marcador sincronizado.',
@@ -512,7 +524,6 @@ export const strings = {
     },
   },
   templates: {
-    title: 'Plantillas',
     none: 'Sin plantilla',
     // Generic names: third-party trademarks in the UI are an App Review risk (guideline 5.2).
     spotify: 'Reproductor verde',
@@ -537,7 +548,7 @@ export const strings = {
     timeout: 'Tardó demasiado en responder. Revisa tu conexión e inténtalo de nuevo.',
     offline: 'Parece que no tienes conexión a internet.',
     noMusicLink: 'No encontré un link de Spotify, YouTube Music o Apple Music.',
-    unsupportedSource: (source: string) => `Servicio no soportado: ${source}`,
+    clipboardUnavailable: 'No se pudo leer el portapapeles. Permite el acceso e inténtalo de nuevo.',
     spotifyStatus: (status: number) => `Spotify respondió ${status}. ¿Es un link válido?`,
     spotifyShortLink: 'No se pudo resolver el link corto de Spotify.',
     youtubeVideoNotFound: 'No encontré el video en el link de YouTube.',
@@ -552,6 +563,7 @@ export const strings = {
     captureWebUnsupported: 'La captura solo funciona en iOS/Android.',
     photoOpenFailed: 'No se pudo abrir la foto.',
     videoOpenFailed: 'No se pudo abrir el video.',
+    videoWebUnsupported: 'Los videos solo funcionan en iOS.',
     saveFailed: 'No se pudo guardar.',
     saveWebUnsupported: 'Guardar en Fotos solo funciona en iOS/Android.',
     cameraPermission: 'Activa el permiso de cámara en Ajustes para tomar la foto.',

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState, type ReactNode } from 'react';
 import {
   Animated,
   Easing,
@@ -61,6 +61,9 @@ export function BottomSheet({ visible, onClose, onClosed, tone = 'light', childr
 
   if (visible && !mounted) setMounted(true);
 
+  // Not an effect dependency: a parent re-render with a new inline callback would restart the animation.
+  const notifyClosed = useEffectEvent(() => onClosed?.());
+
   useEffect(() => {
     if (!mounted) return;
     const animation = visible
@@ -81,35 +84,39 @@ export function BottomSheet({ visible, onClose, onClosed, tone = 'light', childr
     animation.start(({ finished }) => {
       if (finished && !visible) {
         setMounted(false);
-        // iOS reports the end of the dismissal through the Modal's onDismiss; elsewhere it's now.
-        if (Platform.OS !== 'ios') onClosed?.();
+        // iOS and web report the end of the dismissal through the Modal's onDismiss; Android, now.
+        if (Platform.OS === 'android') notifyClosed();
       }
     });
     return () => animation.stop();
-  }, [visible, mounted, progress, drag, onClosed]);
+  }, [visible, mounted, progress, drag]);
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderMove: (_event, gesture) => drag.setValue(Math.max(0, gesture.dy)),
-        onPanResponderRelease: (_event, gesture) => {
-          if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
-            onClose();
-          } else {
-            Animated.spring(drag, { toValue: 0, damping: 20, stiffness: 260, useNativeDriver: true }).start();
-          }
-        },
-      }),
-    [drag, onClose],
-  );
+  const panResponder = useMemo(() => {
+    const springBack = () =>
+      Animated.spring(drag, { toValue: 0, damping: 20, stiffness: 260, useNativeDriver: true }).start();
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (_event, gesture) => drag.setValue(Math.max(0, gesture.dy)),
+      onPanResponderRelease: (_event, gesture) => {
+        if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
+          onClose();
+        } else {
+          springBack();
+        }
+      },
+      // A cancelled touch (call banner, system alert) isn't a deliberate swipe: settle back up.
+      onPanResponderTerminate: springBack,
+    });
+  }, [drag, onClose]);
 
   const handleLayout = (event: LayoutChangeEvent) => setHeight(event.nativeEvent.layout.height);
 
-  const translateY = Animated.add(
-    progress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }),
-    drag,
+  // Built once per height: recreating native-driven nodes on every render (every keystroke in a
+  // data sheet) detaches and reattaches the whole graph.
+  const translateY = useMemo(
+    () => Animated.add(progress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }), drag),
+    [progress, drag, height],
   );
 
   return (
@@ -143,7 +150,10 @@ export function BottomSheet({ visible, onClose, onClosed, tone = 'light', childr
             transform: [{ translateY }],
           },
         ]}
+        // A modal sheet hides the backdrop's close button from VoiceOver, so the two-finger scrub
+        // closes it. Not aria-modal: RN doesn't map that to a native View.
         accessibilityViewIsModal
+        onAccessibilityEscape={onClose}
       >
         <View style={styles.grabZone} {...panResponder.panHandlers}>
           <View style={[styles.handle, { backgroundColor: colors.handle }]} />

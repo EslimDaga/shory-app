@@ -13,10 +13,18 @@ const API = 'https://api.football-data.org/v4';
 // The free plan's competitions (football-data.org "TIER_ONE").
 const COMPETITIONS = ['PL', 'PD', 'SA', 'BL1', 'FL1', 'CL', 'DED', 'PPL', 'ELC', 'BSA', 'WC', 'EC'];
 const TEAMS_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// A competition whose team sync failed is retried after this long, not on the next search.
+const TEAMS_RETRY_MS = 60 * 60 * 1000;
 const SYNC_MAX_AGE_MS = 60 * 1000;
 // A match played in the last few days still syncs, for a story posted after the game.
 const SYNC_WINDOW_DAYS = 7;
 const SEARCH_LIMIT = 8;
+
+// football-data.org v4 match statuses.
+const LIVE_STATUSES = ['IN_PLAY', 'PAUSED', 'EXTRA_TIME', 'PENALTY_SHOOTOUT'];
+const FINAL_STATUSES = ['FINISHED', 'AWARDED'];
+// Called off: no score to show, and not the next match either.
+const CALLED_OFF_STATUSES = ['POSTPONED', 'CANCELLED', 'SUSPENDED'];
 
 type Team = { id: number; name: string; shortName: string | null; tla: string | null; crest: string | null };
 
@@ -29,7 +37,10 @@ type ApiMatch = {
   competition: { name: string };
   homeTeam: ApiTeam;
   awayTeam: ApiTeam;
-  score: { fullTime: { home: number | null; away: number | null } };
+  score: {
+    fullTime: { home: number | null; away: number | null };
+    penalties?: { home: number | null; away: number | null } | null;
+  };
 };
 
 class UpstreamError extends Error {}
@@ -89,10 +100,17 @@ async function refreshOneCompetition(db: SupabaseClient): Promise<void> {
       competition: code,
       updated_at: new Date().toISOString(),
     }));
-    if (rows.length > 0) await db.from('football_teams').upsert(rows);
+    if (rows.length > 0) {
+      const { error } = await db.from('football_teams').upsert(rows);
+      if (error) throw error;
+    }
   } catch (error) {
-    // Give it back so the next request retries it.
-    await db.from('football_sync').upsert({ competition: code, synced_at: new Date(0).toISOString() });
+    // Stale again in TEAMS_RETRY_MS, and newer than the other stale competitions, so one that keeps
+    // failing neither costs every search an upstream call nor blocks the others from refreshing.
+    await db.from('football_sync').upsert({
+      competition: code,
+      synced_at: new Date(Date.now() - TEAMS_MAX_AGE_MS + TEAMS_RETRY_MS).toISOString(),
+    });
     console.error('football: team sync failed', code, error);
   }
 }
@@ -119,6 +137,7 @@ async function searchTeams(db: SupabaseClient, query: string): Promise<Team[]> {
   }));
 }
 
+// Rows hold `{ value }`, so a null answer ("no match") is cached too: `body` can't be SQL null.
 async function cached<T>(
   db: SupabaseClient,
   key: string,
@@ -126,52 +145,61 @@ async function cached<T>(
   load: () => Promise<T>,
 ): Promise<T> {
   const { data } = await db.from('football_cache').select('body, fetched_at').eq('key', key).maybeSingle();
-  if (data && Date.now() - Date.parse(data.fetched_at) < maxAgeMs) return data.body as T;
+  if (data && Date.now() - Date.parse(data.fetched_at) < maxAgeMs) return data.body.value as T;
   try {
-    const body = await load();
-    await db.from('football_cache').upsert({ key, body, fetched_at: new Date().toISOString() });
-    return body;
+    const value = await load();
+    const { error } = await db
+      .from('football_cache')
+      .upsert({ key, body: { value }, fetched_at: new Date().toISOString() });
+    if (error) console.error('football: cache write failed', key, error);
+    return value;
   } catch (error) {
     // Upstream busy or down: a stale answer beats none.
-    if (data) return data.body as T;
+    if (data) return data.body.value as T;
     throw error;
   }
 }
 
-// The match between two teams around today: live if it's being played, else the one that just
-// ended, else the next one. Cached for a minute, so a whole stadium syncing costs one call.
+// The match between two teams around today: live if it's being played, else the one whose kickoff
+// is closest to now (on second-leg day, today's match rather than last week's first leg). Cached
+// for a minute, so a whole stadium syncing costs one call.
 async function syncMatch(db: SupabaseClient, homeId: number, awayId: number) {
   const pair = [homeId, awayId].sort((a, b) => a - b).join(':');
-  return cached(db, `sync:${pair}`, SYNC_MAX_AGE_MS, async () => {
+  // `sync2:` rows are wrapped in `{ value }`; older bare `sync:` rows are never read.
+  return cached(db, `sync2:${pair}`, SYNC_MAX_AGE_MS, async () => {
     const day = (offsetDays: number) =>
       new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const { matches } = await footballData<{ matches: ApiMatch[] }>(
       `/teams/${homeId}/matches?dateFrom=${day(-SYNC_WINDOW_DAYS)}&dateTo=${day(1)}`,
     );
-    const between = matches.filter(
-      (match) =>
-        (match.homeTeam.id === homeId && match.awayTeam.id === awayId) ||
-        (match.homeTeam.id === awayId && match.awayTeam.id === homeId),
-    );
-    const rank = (status: string) =>
-      ['IN_PLAY', 'PAUSED'].includes(status) ? 0 : status === 'FINISHED' ? 1 : 2;
-    const match = between.sort(
-      (a, b) =>
-        rank(a.status) - rank(b.status) ||
-        (rank(a.status) === 1
-          ? Date.parse(b.utcDate) - Date.parse(a.utcDate)
-          : Date.parse(a.utcDate) - Date.parse(b.utcDate)),
-    )[0];
+    const isLive = (candidate: ApiMatch) => LIVE_STATUSES.includes(candidate.status);
+    const now = Date.now();
+    const match = matches
+      .filter(
+        (candidate) =>
+          !CALLED_OFF_STATUSES.includes(candidate.status) &&
+          ((candidate.homeTeam.id === homeId && candidate.awayTeam.id === awayId) ||
+            (candidate.homeTeam.id === awayId && candidate.awayTeam.id === homeId)),
+      )
+      .sort(
+        (a, b) =>
+          Number(isLive(b)) - Number(isLive(a)) ||
+          Math.abs(Date.parse(a.utcDate) - now) - Math.abs(Date.parse(b.utcDate) - now),
+      )[0];
     if (!match) return null;
+    // `fullTime` counts shootout goals too (1-1, then 4-3 on penalties, is 5-4), so they're taken out.
+    const penalties = match.score.penalties;
+    const withoutShootout = (total: number | null, shootout: number | null | undefined) =>
+      total === null ? null : total - (shootout ?? 0);
     return {
-      status: rank(match.status) === 0 ? 'live' : rank(match.status) === 1 ? 'finished' : 'scheduled',
+      status: isLive(match) ? 'live' : FINAL_STATUSES.includes(match.status) ? 'finished' : 'scheduled',
       competition: match.competition.name,
       matchday: match.matchday,
       date: match.utcDate,
       home: toTeam(match.homeTeam),
       away: toTeam(match.awayTeam),
-      homeScore: match.score.fullTime.home,
-      awayScore: match.score.fullTime.away,
+      homeScore: withoutShootout(match.score.fullTime.home, penalties?.home),
+      awayScore: withoutShootout(match.score.fullTime.away, penalties?.away),
     };
   });
 }

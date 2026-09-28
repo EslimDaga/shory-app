@@ -20,6 +20,7 @@ import { AuthShowcase } from './components/AuthShowcase';
 import { LegalNote } from './components/LegalNote';
 import { BackButton } from './components/OnboardingHeader';
 import { SoftBackdrop } from './components/SoftBackdrop';
+import { useAnnounce } from './hooks/useAnnounce';
 
 export type AuthMode = 'signup' | 'login';
 
@@ -44,6 +45,7 @@ export function AuthScreen({ mode, onBack, onEmail }: Props) {
   }, []);
 
   useEffect(() => clearError, [clearError]);
+  useAnnounce(error);
 
   const handleSignIn = (provider: AuthProviderId) => {
     hapticSelection();
@@ -127,7 +129,7 @@ export function AuthScreen({ mode, onBack, onEmail }: Props) {
             />
           </Animated.View>
           {error ? (
-            <Animated.Text entering={FadeIn} style={styles.error} accessibilityLiveRegion="polite">
+            <Animated.Text entering={FadeIn} style={styles.error} aria-live="polite">
               {error}
             </Animated.Text>
           ) : null}

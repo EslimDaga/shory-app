@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   PanResponder,
   StyleSheet,
@@ -11,10 +11,11 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { BottomSheet } from '@/components/BottomSheet';
 import { DiceIcon } from '@/components/Icons';
 import { PillButton } from '@/components/PillButton';
+import { gradientBottom } from '@/constants/storyBackgrounds';
 import { strings } from '@/i18n/es';
 import { editorColors } from '@/theme/colors';
 import { fonts } from '@/theme/typography';
-import { hexToHsv, hsvToHex, mixColors, randomGradientColors, type Hsv } from '@/utils/color';
+import { hexToHsv, hsvToHex, randomGradientColors, type Hsv } from '@/utils/color';
 import { hapticSelection } from '@/utils/haptics';
 
 type Props = {
@@ -30,6 +31,7 @@ const HUE_HEIGHT = 30;
 const THUMB = 28;
 const PAD_RADIUS = 20;
 const HUE_STOPS = ['#FF0000', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#FF00FF', '#FF0000'];
+const BRIGHTNESS_STEP = 0.1;
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -43,6 +45,12 @@ export function ColorPickerSheet({ visible, initialColor, onClose, onApply }: Pr
   }
 
   const color = hsvToHex(hsv);
+  // Stable, so the drag responders below aren't rebuilt on every move.
+  const changeSaturationValue = useCallback(
+    (s: number, v: number) => setHsv((current) => ({ ...current, s, v })),
+    [],
+  );
+  const changeHue = useCallback((h: number) => setHsv((current) => ({ ...current, h })), []);
 
   return (
     <BottomSheet visible={visible} onClose={onClose} tone="dark">
@@ -56,8 +64,8 @@ export function ColorPickerSheet({ visible, initialColor, onClose, onApply }: Pr
         </View>
       </View>
 
-      <SaturationValuePad hsv={hsv} onChange={(s, v) => setHsv((current) => ({ ...current, s, v }))} />
-      <HueSlider hue={hsv.h} onChange={(h) => setHsv((current) => ({ ...current, h }))} />
+      <SaturationValuePad hsv={hsv} onChange={changeSaturationValue} />
+      <HueSlider hue={hsv.h} onChange={changeHue} />
 
       <View style={styles.actions}>
         <View style={styles.flex}>
@@ -84,6 +92,7 @@ function usePadWidth() {
   return window.width - SHEET_PADDING * 2;
 }
 
+// `onMove` must be stable (useCallback): a new responder mid-drag would restart the gesture.
 function useDragResponder(onMove: (x: number, y: number) => void) {
   return useMemo(() => {
     const handle = (event: GestureResponderEvent) =>
@@ -100,13 +109,29 @@ function useDragResponder(onMove: (x: number, y: number) => void) {
 
 function SaturationValuePad({ hsv, onChange }: { hsv: Hsv; onChange: (s: number, v: number) => void }) {
   const width = usePadWidth();
-  const responder = useDragResponder((x, y) => onChange(clamp(x / width), 1 - clamp(y / SQUARE_HEIGHT)));
+  const responder = useDragResponder(
+    useCallback(
+      (x: number, y: number) => onChange(clamp(x / width), 1 - clamp(y / SQUARE_HEIGHT)),
+      [onChange, width],
+    ),
+  );
   const hueColor = hsvToHex({ h: hsv.h, s: 1, v: 1 });
 
+  // Screen readers adjust the pad's vertical axis (brightness); the hue slider below does the rest.
   return (
     <View
       style={[styles.pad, { width, height: SQUARE_HEIGHT }]}
-      accessibilityLabel={strings.editor.colorPickerTitle}
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel={strings.editor.colorPickerBrightness}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(hsv.v * 100)}
+      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+      onAccessibilityAction={(event) => {
+        const step = event.nativeEvent.actionName === 'increment' ? BRIGHTNESS_STEP : -BRIGHTNESS_STEP;
+        onChange(hsv.s, clamp(hsv.v + step));
+      }}
       {...responder.panHandlers}
     >
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -142,14 +167,20 @@ function SaturationValuePad({ hsv, onChange }: { hsv: Hsv; onChange: (s: number,
 
 function HueSlider({ hue, onChange }: { hue: number; onChange: (hue: number) => void }) {
   const width = usePadWidth();
-  const responder = useDragResponder((x) => onChange(clamp(x / width) * 359.9));
+  // Same mapping as the thumb below: its center sits under the finger across the whole track.
+  const responder = useDragResponder(
+    useCallback((x: number) => onChange(clamp((x - THUMB / 2) / (width - THUMB)) * 359.9), [onChange, width]),
+  );
 
   return (
     <View
       style={[styles.hue, { width }]}
+      accessible
       accessibilityRole="adjustable"
       accessibilityLabel={strings.editor.colorPickerHue}
-      accessibilityValue={{ min: 0, max: 360, now: Math.round(hue) }}
+      aria-valuemin={0}
+      aria-valuemax={360}
+      aria-valuenow={Math.round(hue)}
       onAccessibilityAction={(event) => {
         const step = event.nativeEvent.actionName === 'increment' ? 15 : -15;
         onChange((hue + step + 360) % 360);
@@ -189,7 +220,7 @@ function PreviewSwatch({ color }: { color: string }) {
       <Defs>
         <LinearGradient id="picker-preview" x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={color} />
-          <Stop offset="1" stopColor={mixColors(color, '#000000', 0.72)} />
+          <Stop offset="1" stopColor={gradientBottom(color)} />
         </LinearGradient>
       </Defs>
       <Rect width={34} height={34} rx={17} fill="url(#picker-preview)" stroke={editorColors.hairline} />

@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import { Animated, Image, StyleSheet, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import type { StoryBackground } from '@/types/storyBackground';
+import { useSvgId } from '../svgId';
 import { useStoryBackdrop, type StoryBackdrop } from './StoryBackdropContext';
 
 type Props = {
@@ -16,7 +17,14 @@ const FALLBACK_BLUR = 30;
 // Upper bound on how long a widget stays hidden waiting for its blurred backdrop.
 const REVEAL_TIMEOUT_MS = 700;
 
-export function LiquidGlass({ widgetWidth, widgetHeight, inset, fallbackImageUri }: Props) {
+// Memoized: the player re-renders on every story-clock tick while a video records, and none of
+// that reaches the glass.
+export const LiquidGlass = memo(function LiquidGlass({
+  widgetWidth,
+  widgetHeight,
+  inset,
+  fallbackImageUri,
+}: Props) {
   const backdrop = useStoryBackdrop();
 
   return (
@@ -44,7 +52,7 @@ export function LiquidGlass({ widgetWidth, widgetHeight, inset, fallbackImageUri
       </Svg>
     </View>
   );
-}
+});
 
 function BackdropSlice({
   backdrop,
@@ -58,9 +66,15 @@ function BackdropSlice({
   inset: number;
 }) {
   const { translation, pinchScale, canvasScale, storyWidth, storyHeight } = backdrop;
-  const inverseScale = Animated.divide(1, pinchScale);
-  const offsetX = Animated.divide(Animated.multiply(translation.x, -1 / canvasScale), pinchScale);
-  const offsetY = Animated.divide(Animated.multiply(translation.y, -1 / canvasScale), pinchScale);
+  // Native-driven nodes: rebuilding them on each render would detach and reattach the graph.
+  const { inverseScale, offsetX, offsetY } = useMemo(
+    () => ({
+      inverseScale: Animated.divide(1, pinchScale),
+      offsetX: Animated.divide(Animated.multiply(translation.x, -1 / canvasScale), pinchScale),
+      offsetY: Animated.divide(Animated.multiply(translation.y, -1 / canvasScale), pinchScale),
+    }),
+    [translation, pinchScale, canvasScale],
+  );
 
   return (
     <Animated.View
@@ -87,6 +101,7 @@ function BackgroundFill({
 }) {
   const photoUri = background.kind === 'photo' ? background.uri : null;
   const releaseRef = useRef<(() => void) | null>(null);
+  const gradientId = useSvgId('glass-backdrop');
 
   // Runs before paint: the widget stays hidden until the blurred photo is decoded,
   // instead of flashing an empty glass card that fills in a moment later.
@@ -121,12 +136,12 @@ function BackgroundFill({
   return (
     <Svg width="100%" height="100%">
       <Defs>
-        <LinearGradient id="glass-backdrop" x1="0" y1="0" x2="0" y2="1">
+        <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={background.top} />
           <Stop offset="1" stopColor={background.bottom} />
         </LinearGradient>
       </Defs>
-      <Rect width="100%" height="100%" fill="url(#glass-backdrop)" />
+      <Rect width="100%" height="100%" fill={`url(#${gradientId})`} />
     </Svg>
   );
 }

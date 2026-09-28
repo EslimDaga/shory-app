@@ -5,11 +5,14 @@ const MAX_EXPORTS = 500;
 const MAX_RECENTS = 12;
 
 export function appendExport(history: History, track: TrackMetadata, exportedAt: number): History {
+  const { artist } = track;
   return {
     exports: [...history.exports, exportedAt].slice(-MAX_EXPORTS),
     recents: [
       { track, exportedAt },
       ...history.recents.filter((entry) => entry.track.url !== track.url),
     ].slice(0, MAX_RECENTS),
+    total: history.total + 1,
+    artists: artist && !history.artists.includes(artist) ? [...history.artists, artist] : history.artists,
   };
 }

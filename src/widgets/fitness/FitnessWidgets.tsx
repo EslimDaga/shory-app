@@ -10,6 +10,7 @@ import { Lightning } from 'phosphor-react-native/src/icons/Lightning';
 import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { strings } from '@/i18n/es';
 import { withAlpha } from '@/utils/color';
+import { useSvgId } from '../svgId';
 import { getTonePalette, type TonePalette } from '../tonePalette';
 import { readData, toNumber, type WidgetProps } from '../types';
 import { WidgetSurface } from '../WidgetSurface';
@@ -59,7 +60,7 @@ export function StepsWidget(props: WidgetProps) {
       <Value palette={palette} value={thousands(toNumber(values.steps))} size={34} style={styles.tight} />
       <Caption palette={palette}>{text.steps.unit}</Caption>
       <View style={styles.fillBottom}>
-        <Sparkline palette={palette} values={STEPS_CURVE} width={140} height={54} id="steps" />
+        <Sparkline palette={palette} values={STEPS_CURVE} width={140} height={54} />
       </View>
     </WidgetSurface>
   );
@@ -531,15 +532,16 @@ function ZoneBar({ palette, position }: { palette: TonePalette; position: number
   const width = FIT_MEDIUM_CONTENT;
   const height = 22;
   const knobX = 11 + clamp01(position) * (width - 22);
+  const gradientId = useSvgId('zone');
   return (
     <Svg width={width} height={height + 8}>
       <Defs>
-        <LinearGradient id="zone" x1="0" y1="0" x2="1" y2="0">
+        <LinearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
           <Stop offset="0" stopColor={palette.onSurface} stopOpacity={0.12} />
           <Stop offset="1" stopColor={palette.onSurface} stopOpacity={1} />
         </LinearGradient>
       </Defs>
-      <Rect x={0} y={4} width={width} height={height} rx={height / 2} fill="url(#zone)" />
+      <Rect x={0} y={4} width={width} height={height} rx={height / 2} fill={`url(#${gradientId})`} />
       <Circle
         cx={knobX}
         cy={4 + height / 2}

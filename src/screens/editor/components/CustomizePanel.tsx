@@ -17,6 +17,7 @@ import { fonts } from '@/theme/typography';
 import type { TrackMetadata } from '@/types/music';
 import { formatDuration } from '@/utils/time';
 import { AUDIO_DEVICES, AudioDeviceIcon, BluetoothOutputIcon } from '@/widgets/AudioDeviceIcon';
+import { FALLBACK_DURATION_MS } from '@/widgets/playback';
 import { getTonePalette } from '@/widgets/tonePalette';
 import { ToneFill } from '@/widgets/ToneFill';
 import type { WidgetConfig, WidgetDefinition, WidgetOption } from '@/widgets/types';
@@ -27,7 +28,8 @@ type Props = {
   widget: WidgetDefinition;
   track: TrackMetadata;
   config: WidgetConfig;
-  onChange: (patch: Partial<WidgetConfig>) => void;
+  // `haptic: false` for changes that stream in while dragging, which would buzz on every move.
+  onChange: (patch: Partial<WidgetConfig>, haptic?: boolean) => void;
   onEditContent: () => void;
 };
 
@@ -51,7 +53,6 @@ const OPTION_SECTION: Record<WidgetOption, Section> = {
   times: 'show',
 };
 
-const FALLBACK_DURATION_MS = 200000;
 const CIRCLE = 42;
 
 export function CustomizePanel({ widget, track, config, onChange, onEditContent }: Props) {
@@ -59,6 +60,16 @@ export function CustomizePanel({ widget, track, config, onChange, onEditContent 
   const [picked, setPicked] = useState<Section>(sections[0]);
   // A widget switch can drop the open section (e.g. Mini has no device), so fall back to the first one.
   const section = sections.includes(picked) ? picked : sections[0];
+
+  if (sections.length === 0) {
+    return (
+      <Tray scroll={false}>
+        <View style={styles.body}>
+          <Text style={styles.empty}>{strings.editor.customize.empty}</Text>
+        </View>
+      </Tray>
+    );
+  }
 
   return (
     <Tray scroll={false}>
@@ -79,7 +90,7 @@ export function CustomizePanel({ widget, track, config, onChange, onEditContent 
               key={id}
               accessibilityRole="tab"
               accessibilityLabel={label}
-              accessibilityState={{ selected: active }}
+              aria-selected={active}
               onPress={() => setPicked(id)}
               hitSlop={6}
               style={[styles.tab, active && styles.tabActive]}
@@ -93,7 +104,7 @@ export function CustomizePanel({ widget, track, config, onChange, onEditContent 
   );
 }
 
-type SectionProps = { config: WidgetConfig; onChange: (patch: Partial<WidgetConfig>) => void };
+type SectionProps = { config: WidgetConfig; onChange: Props['onChange'] };
 
 function ContentSection({
   widget,
@@ -135,7 +146,7 @@ function ToneSection({ track, config, onChange }: SectionProps & { track: TrackM
         return (
           <CircleOption
             key={id}
-            label={label}
+            accessibilityLabel={label}
             active={config.tone === id}
             onPress={() => onChange({ tone: id })}
           >
@@ -155,17 +166,15 @@ function DeviceSection({ config, onChange }: SectionProps) {
   return (
     <OptionRow>
       <CircleOption
-        label={strings.editor.deviceBluetooth}
         accessibilityLabel={strings.editor.deviceOption(strings.editor.deviceBluetooth)}
         active={config.device === null}
         onPress={() => onChange({ device: null })}
       >
         <BluetoothOutputIcon color={editorColors.text} size={16} />
       </CircleOption>
-      {AUDIO_DEVICES.map(({ id, name, short }) => (
+      {AUDIO_DEVICES.map(({ id, name }) => (
         <CircleOption
           key={id}
-          label={short}
           accessibilityLabel={strings.editor.deviceOption(name)}
           active={config.device === id}
           onPress={() => onChange({ device: id })}
@@ -185,7 +194,7 @@ function ProgressSection({ track, config, onChange }: SectionProps & { track: Tr
       <View style={styles.flex}>
         <Slider
           value={config.progress}
-          onChange={(progress) => onChange({ progress })}
+          onChange={(progress) => onChange({ progress }, false)}
           accessibilityLabel={strings.editor.customize.progressLabel}
         />
       </View>
@@ -226,7 +235,7 @@ function ShowSection({ widget, config, onChange }: SectionProps & { widget: Widg
             key={option}
             accessibilityRole="switch"
             accessibilityLabel={label}
-            accessibilityState={{ checked: value }}
+            aria-checked={value}
             onPress={() => onChange(patch)}
             style={({ pressed }) => [styles.circle, value && styles.circleActive, pressed && styles.pressed]}
           >
@@ -247,14 +256,12 @@ function OptionRow({ children }: { children: ReactNode }) {
 }
 
 function CircleOption({
-  label,
   accessibilityLabel,
   active,
   onPress,
   children,
 }: {
-  label: string;
-  accessibilityLabel?: string;
+  accessibilityLabel: string;
   active: boolean;
   onPress: () => void;
   children: ReactNode;
@@ -262,8 +269,8 @@ function CircleOption({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={accessibilityLabel ?? label}
+      aria-selected={active}
+      accessibilityLabel={accessibilityLabel}
       onPress={onPress}
       style={({ pressed }) => [styles.option, pressed && styles.pressed]}
     >
@@ -300,6 +307,13 @@ const styles = StyleSheet.create({
   },
   content: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18 },
   summary: { flex: 1, fontFamily: fonts.sansMedium, fontSize: 14, color: editorColors.textMuted },
+  empty: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+    color: editorColors.textMuted,
+    textAlign: 'center',
+    paddingHorizontal: 18,
+  },
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',

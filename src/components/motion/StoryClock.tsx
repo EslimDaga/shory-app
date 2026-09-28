@@ -1,29 +1,40 @@
-import { createContext, use, useEffect, useState, type ReactNode } from 'react';
+import { createContext, use, useEffect, useImperativeHandle, useState, type ReactNode, type Ref } from 'react';
 
 // While a video is being rendered, the exact time (seconds) of the frame being drawn. Animated
 // parts read it instead of their own real-time animations, so every frame is deterministic.
-export const StoryClockContext = createContext<number | null>(null);
+const StoryClockContext = createContext<number | null>(null);
 
 export function useStoryClock(): number | null {
   return use(StoryClockContext);
 }
 
-// Provides the story clock to the editor preview. A fixed `time` (the frame being recorded) wins;
-// otherwise, when `loopSeconds` is set, it loops in real time at the export's frame rate, so the
-// preview plays exactly the frames the video will contain. With neither, the story stands still.
+export type StoryClockHandle = {
+  // Pins the clock to the frame being recorded; null hands it back to the preview loop.
+  setTime: (seconds: number | null) => void;
+};
+
+// Provides the story clock to the editor preview. A time set through `ref` (the frame being
+// recorded) wins; otherwise, when `loopSeconds` is set, it loops in real time at the export's
+// frame rate, so the preview plays exactly the frames the video will contain. With neither, the
+// story stands still.
 export function StoryClockProvider({
-  time,
   loopSeconds,
   fps,
+  ref,
   children,
 }: {
-  time: number | null;
   loopSeconds: number | null;
   fps: number;
+  ref?: Ref<StoryClockHandle>;
   children: ReactNode;
 }) {
+  // Held here rather than by the screen: a new time each recorded frame then re-renders only what
+  // reads the clock, not the whole editor around it.
+  const [time, setTime] = useState<number | null>(null);
   const [live, setLive] = useState(0);
   const running = time === null && loopSeconds !== null;
+
+  useImperativeHandle(ref, () => ({ setTime }), []);
 
   useEffect(() => {
     if (!running) return;

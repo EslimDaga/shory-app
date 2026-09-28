@@ -90,7 +90,10 @@ Deno.serve(async (request) => {
 
   const body = (await request.json().catch(() => ({}))) as { appleAuthorizationCode?: unknown };
   const appleCode = typeof body.appleAuthorizationCode === 'string' ? body.appleAuthorizationCode : null;
-  const isAppleUser = data.user.app_metadata?.provider === 'apple';
+  // Apple may be a linked identity rather than the first sign-in method: its tokens still need revoking.
+  const isAppleUser =
+    data.user.app_metadata?.provider === 'apple' ||
+    Boolean(data.user.identities?.some((identity) => identity.provider === 'apple'));
 
   if (isAppleUser) {
     const configured = APPLE_TEAM_ID && APPLE_KEY_ID && APPLE_CLIENT_ID && APPLE_PRIVATE_KEY;
@@ -111,23 +114,32 @@ Deno.serve(async (request) => {
     }
   }
 
-  // Purchase history at RevenueCat goes too (best effort: the account is deleted either way). The
-  // App Store subscription itself can only be cancelled by the person, in their Apple ID settings.
-  const revenueCatKey = Deno.env.get('REVENUECAT_SECRET_KEY');
-  if (revenueCatKey) {
-    await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(data.user.id)}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${revenueCatKey}` },
-      signal: AbortSignal.timeout(10_000),
-    }).catch((revenueCatError) => console.error('delete-account: RevenueCat delete failed', revenueCatError));
-  }
-
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
   const { error: deleteError } = await admin.auth.admin.deleteUser(data.user.id);
   if (deleteError) {
     // Details stay in the function logs; the app only needs to know it failed.
     console.error('delete-account: deleteUser failed', deleteError.message);
     return json(500, { error: 'delete_failed' });
+  }
+
+  // Purchase history at RevenueCat goes too (best effort), but only now that the account is gone, so
+  // a failed deletion can't leave an account without its Pro. The App Store subscription itself can
+  // only be cancelled by the person, in their Apple ID settings.
+  const revenueCatKey = Deno.env.get('REVENUECAT_SECRET_KEY');
+  if (revenueCatKey) {
+    try {
+      const response = await fetch(
+        `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(data.user.id)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${revenueCatKey}` },
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      if (!response.ok) console.error('delete-account: RevenueCat delete returned', response.status);
+    } catch (revenueCatError) {
+      console.error('delete-account: RevenueCat delete failed', revenueCatError);
+    }
   }
 
   return json(200, { deleted: true });

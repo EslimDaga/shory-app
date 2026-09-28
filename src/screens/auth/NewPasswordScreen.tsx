@@ -15,6 +15,7 @@ import { fonts } from '@/theme/typography';
 import { hapticSuccess } from '@/utils/haptics';
 import { isPasswordStrongEnough } from '@/utils/passwordStrength';
 import { SoftBackdrop } from './components/SoftBackdrop';
+import { useAnnounce } from './hooks/useAnnounce';
 
 const text = strings.auth.email;
 
@@ -23,6 +24,7 @@ export function NewPasswordScreen() {
   const { setNewPassword, pendingMethod, error } = useAuth();
   const [password, setPassword] = useState('');
   const [invalid, setInvalid] = useState(false);
+  useAnnounce(error);
 
   const save = async () => {
     if (!isPasswordStrongEnough(password)) {
@@ -62,7 +64,11 @@ export function NewPasswordScreen() {
             onSubmitEditing={save}
           />
           <PasswordStrengthMeter password={password} invalid={invalid} />
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? (
+            <Text style={styles.error} aria-live="polite">
+              {error}
+            </Text>
+          ) : null}
           <PillButton label={text.newPasswordSave} loading={pendingMethod === 'email'} onPress={save} />
         </Animated.View>
       </KeyboardAvoidingView>

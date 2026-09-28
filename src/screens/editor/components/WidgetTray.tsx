@@ -27,12 +27,14 @@ export function WidgetTray({ track, selectedId, configFor, onSelect, onOpenLibra
     <Tray>
       {WIDGETS.map((widget) => {
         const active = widget.id === selectedId;
+        const locked = widget.pro && !isPro;
+        const label = strings.editor.widgetOption(widget.name);
         return (
           <Pressable
             key={widget.id}
             accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={strings.editor.widgetOption(widget.name)}
+            aria-selected={active}
+            accessibilityLabel={locked ? strings.paywall.proLockedOption(label) : label}
             onPress={() => onSelect(widget)}
             style={({ pressed }) => [styles.item, pressed && styles.pressed]}
           >
@@ -44,7 +46,7 @@ export function WidgetTray({ track, selectedId, configFor, onSelect, onOpenLibra
                 width={TILE_WIDTH}
                 height={TILE_HEIGHT}
               />
-              {widget.pro && !isPro && <ProBadge style={styles.proBadge} />}
+              {locked && <ProBadge style={styles.proBadge} />}
             </View>
           </Pressable>
         );

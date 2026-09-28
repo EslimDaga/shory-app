@@ -9,6 +9,8 @@ type Props = {
 
 export function Tray({ children, scroll = true }: Props) {
   const [progress] = useState(() => new Animated.Value(0));
+  // Created once: a new interpolation each render would rewire the native-driven animation.
+  const [translateY] = useState(() => progress.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }));
 
   useEffect(() => {
     Animated.timing(progress, {
@@ -20,15 +22,7 @@ export function Tray({ children, scroll = true }: Props) {
   }, [progress]);
 
   return (
-    <Animated.View
-      style={[
-        styles.tray,
-        {
-          opacity: progress,
-          transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
-        },
-      ]}
-    >
+    <Animated.View style={[styles.tray, { opacity: progress, transform: [{ translateY }] }]}>
       {scroll ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.content}>
           {children}

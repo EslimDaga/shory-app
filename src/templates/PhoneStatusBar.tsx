@@ -1,7 +1,12 @@
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
+import { useStoryClock } from '@/components/motion/StoryClock';
 
-type Props = { unit: number; color?: string };
+type Props = { unit: number };
+
+const color = '#FFFFFF';
+const CLOCK_REFRESH_MS = 10_000;
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -40,8 +45,16 @@ function wifiBand(inner: number, outer: number): string {
 }
 
 // The iOS status bar drawn at the top of the web templates: time, signal, Wi‑Fi and battery.
-export function PhoneStatusBar({ unit: s, color = '#FFFFFF' }: Props) {
-  const now = new Date();
+export function PhoneStatusBar({ unit: s }: Props) {
+  // Kept current while the story stands still (preview, photo export), and frozen while a video
+  // plays or records: its frames are rendered over several seconds and must all show the same minute.
+  const playing = useStoryClock() !== null;
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    if (playing) return;
+    const timer = setInterval(() => setNow(new Date()), CLOCK_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [playing]);
   const pt = POINT * s;
   const bodyHeight = BATTERY.height - 1;
   return (

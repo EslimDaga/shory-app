@@ -1,12 +1,11 @@
-import { useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { View } from 'react-native';
-import { File } from 'expo-file-system';
-import { captureRef } from 'react-native-view-shot';
 import { strings } from '@/i18n/es';
 import { openInstagramStoryCamera, shareToInstagramStories } from '@/services/instagram/instagramStories';
 import { saveToPhotos } from '@/services/media/photoLibrary';
+import { deleteFile, fileExists } from '@/services/media/tempFiles';
 import { renderStoryVideo } from '@/services/media/videoExport';
-import { captureStickerLayer, captureStoryImage } from '@/services/media/viewCapture';
+import { captureScreenStill, captureStickerLayer, captureStoryImage } from '@/services/media/viewCapture';
 import type { TrackMetadata } from '@/types/music';
 import { getErrorMessage } from '@/utils/errors';
 import { RecordingCancelledError } from 'shory-recorder';
@@ -39,20 +38,6 @@ type Options = {
   onMessage: (text: string, isError?: boolean) => void;
 };
 
-const fileExists = (uri: string) => {
-  try {
-    return new File(uri).exists;
-  } catch {
-    return false;
-  }
-};
-
-const deleteFile = (uri: string) => {
-  try {
-    new File(uri).delete();
-  } catch {}
-};
-
 export function useStoryExport({
   track,
   canvasRef,
@@ -72,6 +57,47 @@ export function useStoryExport({
   const [videoExport, setVideoExport] = useState<VideoExport | null>(null);
   const cancelled = useRef(false);
   const lastVideo = useRef<{ key: string; uri: string } | null>(null);
+  // Set synchronously, unlike `pendingAction`: two taps before the next render can't both start an
+  // export (the native recorder can only run one at a time).
+  const busy = useRef(false);
+  const disposed = useRef(false);
+
+  // Leaving the editor stops a render in progress and deletes the cached video (tens of MB). A
+  // save or share still reading it deletes it when it's done instead.
+  useEffect(() => {
+    disposed.current = false;
+    return () => {
+      disposed.current = true;
+      cancelled.current = true;
+      if (!busy.current && lastVideo.current) deleteFile(lastVideo.current.uri);
+    };
+  }, []);
+
+  const run = async (
+    action: ExportAction,
+    haptic: () => void,
+    task: () => Promise<void>,
+    onError: (error: unknown) => void,
+  ) => {
+    if (busy.current) return;
+    busy.current = true;
+    haptic();
+    setPendingAction(action);
+    try {
+      await task();
+    } catch (error) {
+      onError(error);
+    } finally {
+      busy.current = false;
+      setPendingAction(null);
+      if (disposed.current && lastVideo.current) deleteFile(lastVideo.current.uri);
+    }
+  };
+
+  // A cancelled recording is the user's choice, not a failure.
+  const reportUnlessCancelled = (fallback: string) => (error: unknown) => {
+    if (!(error instanceof RecordingCancelledError)) onMessage(getErrorMessage(error, fallback), true);
+  };
 
   // Rendering a video is the expensive part, so it's done once per look: sharing and then saving
   // (or sharing twice) without touching the story reuses the file instead of recording again.
@@ -81,20 +107,28 @@ export function useStoryExport({
     if (cached?.key === key && fileExists(cached.uri)) return cached.uri;
 
     cancelled.current = false;
-    const previewUri = await captureRef(storyRef, { format: 'jpg', quality: 0.8, result: 'tmpfile' }).catch(
-      () => null,
-    );
+    const previewUri = await captureScreenStill(storyRef).catch(() => null);
     setVideoExport({ progress: 0, previewUri });
+    // The overlay shows whole percents: re-rendering on every frame would only slow the recording.
+    let lastPercent = 0;
     try {
       const uri = await renderStoryVideo(storyRef.current, {
         durationSeconds,
         backgroundVideo,
         setClock,
-        onProgress: (progress) => setVideoExport({ progress, previewUri }),
+        onProgress: (progress) => {
+          const percent = Math.round(progress * 100);
+          if (percent === lastPercent) return;
+          lastPercent = percent;
+          setVideoExport({ progress: percent / 100, previewUri });
+        },
         shouldCancel: () => cancelled.current,
       });
       if (cached && cached.uri !== uri) deleteFile(cached.uri);
       lastVideo.current = { key, uri };
+      // X tapped while the last frame or the encoder was finishing: the file is kept for reuse,
+      // but it isn't saved or shared.
+      if (cancelled.current) throw new RecordingCancelledError();
       return uri;
     } finally {
       setVideoExport(null);
@@ -108,134 +142,113 @@ export function useStoryExport({
 
   // The video carries the widget baked in, animated, at its exact position — Instagram can't
   // animate a sticker, so the whole story travels as one background video.
-  const shareVideo = async () => {
-    if (pendingAction) return;
-    hapticImpact();
-    setPendingAction('share');
-    try {
-      const backgroundVideoUri = await renderVideo();
-      await shareToInstagramStories({ backgroundVideoUri, linkUrl: track.url });
-      onExported?.(track);
-    } catch (error) {
-      if (!(error instanceof RecordingCancelledError)) {
-        onMessage(getErrorMessage(error, strings.errors.instagramOpenFailed), true);
-      }
-    } finally {
-      setPendingAction(null);
-    }
-  };
+  const shareVideo = () =>
+    run(
+      'share',
+      hapticImpact,
+      async () => {
+        const backgroundVideoUri = await renderVideo();
+        await shareToInstagramStories({ backgroundVideoUri, linkUrl: track.url });
+        onExported?.(track);
+      },
+      reportUnlessCancelled(strings.errors.instagramOpenFailed),
+    );
 
   // Instagram doesn't let a story shared from another app carry a song. So "with the song" saves
   // the finished story to Photos and opens Instagram's story camera: picked from the gallery
   // there, the story takes the Music sticker like any other.
-  const shareWithMusic = async (video: boolean) => {
-    if (pendingAction) return;
-    hapticImpact();
-    setPendingAction('share');
-    try {
-      if (video) {
+  const shareWithMusic = (video: boolean) =>
+    run(
+      'share',
+      hapticImpact,
+      async () => {
+        if (video) {
+          await saveToPhotos(await renderVideo());
+        } else {
+          const imageUri = await captureStoryImage(storyRef);
+          try {
+            await saveToPhotos(imageUri);
+          } finally {
+            deleteFile(imageUri);
+          }
+        }
+        await openInstagramStoryCamera();
+        onExported?.(track);
+      },
+      reportUnlessCancelled(strings.errors.instagramOpenFailed),
+    );
+
+  const saveVideo = () =>
+    run(
+      'save',
+      hapticSelection,
+      async () => {
         await saveToPhotos(await renderVideo());
-      } else {
+        hapticSuccess();
+        onMessage(strings.editor.videoSaved);
+        onExported?.(track);
+      },
+      reportUnlessCancelled(strings.errors.saveFailed),
+    );
+
+  const shareToStories = () =>
+    run(
+      'share',
+      hapticImpact,
+      async () => {
+        if (templateActive) {
+          const backgroundImageUri = await captureStoryImage(storyRef);
+          try {
+            await shareToInstagramStories({ backgroundImageUri, linkUrl: track.url });
+          } finally {
+            deleteFile(backgroundImageUri);
+          }
+          onExported?.(track);
+          return;
+        }
+        // Instagram always centers the sticker and has no way to position it, so the sticker is a
+        // transparent layer the size of the whole story with the widget where the user placed it:
+        // centered over the background, it lines up, and it stays a separate, movable sticker.
+        const restore = await canvasRef.current?.prepareStickerCapture({ watermark });
+        let backgroundImageUri: string;
+        let stickerImageUri: string;
+        try {
+          [backgroundImageUri, stickerImageUri] = await Promise.all([
+            captureStoryImage(backgroundRef),
+            captureStickerLayer(stickerRef),
+          ]);
+        } finally {
+          restore?.();
+        }
+        try {
+          await shareToInstagramStories({ backgroundImageUri, stickerImageUri, linkUrl: track.url });
+        } finally {
+          // Instagram gets the images through the pasteboard; the capture files aren't needed after.
+          deleteFile(backgroundImageUri);
+          deleteFile(stickerImageUri);
+        }
+        onExported?.(track);
+      },
+      (error) => onMessage(getErrorMessage(error, strings.errors.instagramOpenFailed), true),
+    );
+
+  const saveStory = () =>
+    run(
+      'save',
+      hapticSelection,
+      async () => {
         const imageUri = await captureStoryImage(storyRef);
         try {
           await saveToPhotos(imageUri);
         } finally {
           deleteFile(imageUri);
         }
-      }
-      await openInstagramStoryCamera();
-      onExported?.(track);
-    } catch (error) {
-      if (!(error instanceof RecordingCancelledError)) {
-        onMessage(getErrorMessage(error, strings.errors.instagramOpenFailed), true);
-      }
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  const saveVideo = async () => {
-    if (pendingAction) return;
-    hapticSelection();
-    setPendingAction('save');
-    try {
-      await saveToPhotos(await renderVideo());
-      hapticSuccess();
-      onMessage(strings.editor.videoSaved);
-      onExported?.(track);
-    } catch (error) {
-      if (!(error instanceof RecordingCancelledError)) {
-        onMessage(getErrorMessage(error, strings.errors.saveFailed), true);
-      }
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  const shareToStories = async () => {
-    if (pendingAction) return;
-    hapticImpact();
-    setPendingAction('share');
-    try {
-      if (templateActive) {
-        const backgroundImageUri = await captureStoryImage(storyRef);
-        try {
-          await shareToInstagramStories({ backgroundImageUri, linkUrl: track.url });
-        } finally {
-          deleteFile(backgroundImageUri);
-        }
+        hapticSuccess();
+        onMessage(strings.editor.savedToPhotos);
         onExported?.(track);
-        return;
-      }
-      // Instagram always centers the sticker and has no way to position it, so the sticker is a
-      // transparent layer the size of the whole story with the widget where the user placed it:
-      // centered over the background, it lines up, and it stays a separate, movable sticker.
-      const restore = await canvasRef.current?.prepareStickerCapture({ watermark });
-      let backgroundImageUri: string;
-      let stickerImageUri: string;
-      try {
-        [backgroundImageUri, stickerImageUri] = await Promise.all([
-          captureStoryImage(backgroundRef),
-          captureStickerLayer(stickerRef),
-        ]);
-      } finally {
-        restore?.();
-      }
-      try {
-        await shareToInstagramStories({ backgroundImageUri, stickerImageUri, linkUrl: track.url });
-      } finally {
-        // Instagram gets the images through the pasteboard; the capture files aren't needed after.
-        deleteFile(backgroundImageUri);
-        deleteFile(stickerImageUri);
-      }
-      onExported?.(track);
-    } catch (error) {
-      onMessage(getErrorMessage(error, strings.errors.instagramOpenFailed), true);
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  const saveStory = async () => {
-    if (pendingAction) return;
-    hapticSelection();
-    setPendingAction('save');
-    try {
-      const imageUri = await captureStoryImage(storyRef);
-      try {
-        await saveToPhotos(imageUri);
-      } finally {
-        deleteFile(imageUri);
-      }
-      hapticSuccess();
-      onMessage(strings.editor.savedToPhotos);
-      onExported?.(track);
-    } catch (error) {
-      onMessage(getErrorMessage(error, strings.errors.saveFailed), true);
-    } finally {
-      setPendingAction(null);
-    }
-  };
+      },
+      (error) => onMessage(getErrorMessage(error, strings.errors.saveFailed), true),
+    );
 
   return {
     storyRef,

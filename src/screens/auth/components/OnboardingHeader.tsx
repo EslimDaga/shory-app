@@ -7,7 +7,7 @@ import { fonts } from '@/theme/typography';
 
 type Props = {
   onBack: () => void;
-  progress?: number;
+  progress: number;
   onSkip?: () => void;
 };
 
@@ -15,7 +15,7 @@ export function OnboardingHeader({ onBack, progress, onSkip }: Props) {
   return (
     <View style={styles.header}>
       <BackButton onPress={onBack} />
-      {progress === undefined ? <View style={styles.flex} /> : <ProgressBar progress={progress} />}
+      <ProgressBar progress={progress} />
       {onSkip ? (
         <Pressable accessibilityRole="button" onPress={onSkip} hitSlop={12} style={styles.skip}>
           <Text style={styles.skipText}>{strings.onboarding.skip}</Text>
@@ -59,7 +59,9 @@ function ProgressBar({ progress }: { progress: number }) {
     <View
       style={styles.track}
       accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(progress * 100)}
     >
       <Animated.View style={[styles.fill, { transform: [{ scaleX: value }] }]} />
     </View>
@@ -68,7 +70,6 @@ function ProgressBar({ progress }: { progress: number }) {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 16, height: 56 },
-  flex: { flex: 1 },
   back: {
     width: 48,
     height: 48,

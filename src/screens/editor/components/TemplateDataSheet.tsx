@@ -13,9 +13,13 @@ import { GalleryIcon } from '@/components/Icons';
 import { strings } from '@/i18n/es';
 import type { TemplateContent } from '@/templates/types';
 import { editorColors } from '@/theme/colors';
-import type { AudioDevice } from '@/widgets/AudioDeviceIcon';
 import { fonts } from '@/theme/typography';
-import { AUDIO_DEVICES, AudioDeviceIcon, BluetoothOutputIcon } from '@/widgets/AudioDeviceIcon';
+import {
+  AUDIO_DEVICES,
+  AudioDeviceIcon,
+  BluetoothOutputIcon,
+  type AudioDevice,
+} from '@/widgets/AudioDeviceIcon';
 
 type Props = {
   visible: boolean;
@@ -117,7 +121,7 @@ function DeviceChip({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={strings.editor.deviceOption(name)}
-      accessibilityState={{ selected: active }}
+      aria-selected={active}
       onPress={onPress}
       style={[styles.chip, active && styles.chipActive]}
     >
@@ -146,7 +150,6 @@ function Field({
       <TextInput
         value={value}
         onChangeText={onChange}
-        placeholderTextColor={editorColors.textFaint}
         maxLength={60}
         autoCorrect={false}
         returnKeyType="done"

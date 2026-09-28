@@ -1,7 +1,9 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,7 +23,7 @@ import { X } from 'phosphor-react-native/src/icons/X';
 import { ShoryLogo } from '@/components/ShoryLogo';
 import { LEGAL_URLS } from '@/constants/legal';
 import { strings } from '@/i18n/es';
-import { useSubscription } from '@/providers/SubscriptionProvider';
+import { useSubscription, type ProFeature } from '@/providers/SubscriptionProvider';
 import { WidgetPreview } from '@/screens/editor/components/WidgetPreview';
 import type { Plan } from '@/services/purchases/purchases';
 import { editorColors } from '@/theme/colors';
@@ -100,28 +102,47 @@ export function Paywall() {
     unlocked,
   } = useSubscription();
   const [picked, setPicked] = useState<Plan['period']>('annual');
+  // The feature the sheet opened for. It outlives closing, so the headline doesn't change while
+  // the sheet slides away.
+  const [feature, setFeature] = useState<ProFeature>('upgrade');
+  if (paywall && paywall !== feature) setFeature(paywall);
 
   // The annual plan leads (it carries the trial); falls back to whatever the store offers.
   const plan = plans.find((candidate) => candidate.period === picked) ?? plans[0] ?? null;
   const trialDays = plan?.trialDays ?? null;
+  const ctaTitle = trialDays ? text.startTrial(trialDays) : text.subscribe;
   const showcaseWidth = window.width - 48;
 
   const subscribe = async () => {
     if (!plan) return;
     hapticSelection();
-    if (await buy(plan)) hapticSuccess();
+    if ((await buy(plan)).ok) hapticSuccess();
   };
 
   const restore = async () => {
-    if (await restorePurchases()) hapticSuccess();
+    if ((await restorePurchases()).ok) hapticSuccess();
   };
+
+  // While a purchase or restore settles, the sheet stays open so its result is always seen.
+  const close = () => {
+    if (busy === null) closePaywall();
+  };
+
+  // VoiceOver has no live regions: without this, a failed purchase would go unannounced. Only while
+  // the paywall is open: the account sheet announces its own restore errors.
+  const open = paywall !== null;
+  useEffect(() => {
+    if (open && error && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(error);
+  }, [open, error]);
 
   return (
     <Modal
       visible={paywall !== null}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={closePaywall}
+      // A swipe down dismisses the sheet, except while a purchase or restore settles.
+      allowSwipeDismissal={busy === null}
+      onRequestClose={close}
     >
       {unlocked ? (
         <Welcome action={unlocked} bottomInset={insets.bottom} onDone={closePaywall} />
@@ -140,9 +161,14 @@ export function Paywall() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={text.close}
-                  onPress={closePaywall}
+                  onPress={close}
+                  disabled={busy !== null}
                   hitSlop={10}
-                  style={({ pressed }) => [styles.close, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.close,
+                    busy !== null && styles.closeDisabled,
+                    pressed && styles.pressed,
+                  ]}
                 >
                   <X size={16} color={editorColors.text} weight="bold" />
                 </Pressable>
@@ -153,7 +179,7 @@ export function Paywall() {
                 {'\n'}
                 <Text style={styles.heroAccent}>{text.heroAccent}</Text>
               </Text>
-              <Text style={styles.subtitle}>{text.headlines[paywall ?? 'upgrade']}</Text>
+              <Text style={styles.subtitle}>{text.headlines[feature]}</Text>
 
               <Showcase width={showcaseWidth} />
 
@@ -207,10 +233,17 @@ export function Paywall() {
               onRetry={reloadPlans}
             />
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? (
+              <Text style={styles.error} aria-live="polite">
+                {error}
+              </Text>
+            ) : null}
 
             <Pressable
               accessibilityRole="button"
+              // The spinner has no text: the button keeps its name while busy.
+              aria-label={busy === 'purchase' ? ctaTitle : undefined}
+              aria-busy={busy === 'purchase'}
               onPress={subscribe}
               disabled={!plan || busy !== null}
               style={({ pressed }) => [
@@ -223,9 +256,7 @@ export function Paywall() {
                 <ActivityIndicator color={editorColors.onAccent} />
               ) : (
                 <>
-                  <Text style={styles.ctaText}>
-                    {trialDays ? text.startTrial(trialDays) : text.subscribe}
-                  </Text>
+                  <Text style={styles.ctaText}>{ctaTitle}</Text>
                   {plan && (
                     <Text style={styles.ctaDetail}>
                       {trialDays ? text.thenPrice(plan.price, periodLabel(plan)) : text.cancelAnytime}
@@ -243,13 +274,23 @@ export function Paywall() {
               >
                 <Text style={styles.link}>{text.privacy}</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" onPress={restore} disabled={busy !== null} hitSlop={8}>
-                {busy === 'restore' ? (
-                  <ActivityIndicator size="small" color={editorColors.textMuted} />
-                ) : (
-                  <Text style={styles.link}>{text.restore}</Text>
-                )}
-              </Pressable>
+              {/* Without the store there's nothing to restore from: the link could only ever fail. */}
+              {available && (
+                <Pressable
+                  accessibilityRole="button"
+                  aria-label={busy === 'restore' ? text.restore : undefined}
+                  aria-busy={busy === 'restore'}
+                  onPress={restore}
+                  disabled={busy !== null}
+                  hitSlop={8}
+                >
+                  {busy === 'restore' ? (
+                    <ActivityIndicator size="small" color={editorColors.textMuted} />
+                  ) : (
+                    <Text style={styles.link}>{text.restore}</Text>
+                  )}
+                </Pressable>
+              )}
               <Pressable
                 accessibilityRole="link"
                 onPress={() => WebBrowser.openBrowserAsync(LEGAL_URLS.terms)}
@@ -398,11 +439,21 @@ function Plans({
 }
 
 function PlanCard({ plan, selected, onPress }: { plan: Plan; selected: boolean; onPress: () => void }) {
+  const title = plan.period === 'annual' ? text.annual : text.monthly;
+  // Everything the card shows, read as one: the trial and the per-month price included.
+  const label = [
+    title,
+    plan.trialDays ? text.trialBadge(plan.trialDays) : null,
+    `${plan.price} ${periodLabel(plan)}`,
+    plan.period === 'annual' && plan.pricePerMonth ? text.perMonthShort(plan.pricePerMonth) : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
   return (
     <Pressable
       accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      accessibilityLabel={`${plan.period === 'annual' ? text.annual : text.monthly}, ${plan.price} ${periodLabel(plan)}`}
+      aria-checked={selected}
+      accessibilityLabel={label}
       onPress={onPress}
       style={[styles.plan, selected && styles.planSelected]}
     >
@@ -412,9 +463,7 @@ function PlanCard({ plan, selected, onPress }: { plan: Plan; selected: boolean; 
         </View>
       ) : null}
       <View style={styles.planHeader}>
-        <Text style={[styles.planTitle, !selected && styles.planMuted]}>
-          {plan.period === 'annual' ? text.annual : text.monthly}
-        </Text>
+        <Text style={[styles.planTitle, !selected && styles.planMuted]}>{title}</Text>
         <View style={[styles.radio, selected && styles.radioSelected]}>
           {selected && <Check size={11} color={editorColors.onAccent} weight="bold" />}
         </View>
@@ -442,7 +491,12 @@ function Showcase({ width }: { width: number }) {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         style={{ width }}
-        onMomentumScrollEnd={(event) => setPage(Math.round(event.nativeEvent.contentOffset.x / width))}
+        // onScroll rather than onMomentumScrollEnd, which react-native-web never fires.
+        scrollEventThrottle={16}
+        onScroll={(event) => {
+          const next = Math.round(event.nativeEvent.contentOffset.x / width);
+          setPage((previous) => (previous === next ? previous : next));
+        }}
       >
         {SHOWCASE.map(({ widgetId, config }) => (
           <WidgetPreview
@@ -550,7 +604,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     paddingHorizontal: 7,
-    height: 20,
+    minHeight: 20,
     borderRadius: 6,
     backgroundColor: editorColors.accent,
   },
@@ -568,6 +622,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  closeDisabled: { opacity: 0.4 },
   pressed: { opacity: 0.7 },
   hero: {
     fontFamily: fonts.sansExtraBold,
@@ -594,8 +649,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    height: 32,
+    minHeight: 32,
     paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: editorColors.surfaceRaised,
   },
@@ -626,7 +682,7 @@ const styles = StyleSheet.create({
   plans: { flexDirection: 'row', gap: 10, paddingTop: 10 },
   plan: {
     flex: 1,
-    height: 92,
+    minHeight: 92,
     paddingHorizontal: 14,
     paddingTop: 14,
     paddingBottom: 10,
@@ -676,7 +732,8 @@ const styles = StyleSheet.create({
   retry: { fontFamily: fonts.sansSemiBold, fontSize: 14, color: editorColors.accent },
   error: { fontFamily: fonts.sansMedium, fontSize: 13, color: editorColors.danger, textAlign: 'center' },
   cta: {
-    height: 56,
+    minHeight: 56,
+    paddingVertical: 8,
     borderRadius: 28,
     backgroundColor: editorColors.accent,
     alignItems: 'center',

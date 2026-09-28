@@ -55,7 +55,6 @@ export const onboardingColors = {
   ink: '#0A0A09',
   inkMuted: '#6B6F63',
   row: '#F4F5F0',
-  rowPressed: '#E9EBE2',
   track: '#EDEFE6',
   progress: brand[600],
   error: '#C8321F',

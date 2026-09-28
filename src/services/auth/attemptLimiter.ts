@@ -1,3 +1,4 @@
+import { isAuthError, isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { strings } from '@/i18n/es';
 import { keyValue } from '@/services/storage/keyValue';
 
@@ -10,7 +11,8 @@ type Policy = {
   // Failures allowed inside `windowMs` before the first lockout.
   freeAttempts: number;
   windowMs: number;
-  // First lockout; each further failure doubles it, up to `maxLockMs`.
+  // First lockout; each further failure doubles it, up to `maxLockMs`. A lockout that ended more than
+  // `windowMs` ago no longer counts, so the next one starts from `lockMs` again.
   lockMs: number;
   maxLockMs: number;
 };
@@ -52,13 +54,13 @@ async function save(key: string, state: State): Promise<void> {
 }
 
 // Throws TooManyAttemptsError while `subject` (usually the email) is locked out for `scope`.
-export async function assertAllowed(scope: string, subject: string): Promise<void> {
+async function assertAllowed(scope: string, subject: string): Promise<void> {
   const { lockedUntil } = await load(storageKey(scope, subject));
   const wait = lockedUntil - Date.now();
   if (wait > 0) throw new TooManyAttemptsError(wait);
 }
 
-export async function recordFailure(scope: string, subject: string, policy: Policy): Promise<void> {
+async function recordFailure(scope: string, subject: string, policy: Policy): Promise<void> {
   const key = storageKey(scope, subject);
   const now = Date.now();
   const state = await load(key);
@@ -67,17 +69,27 @@ export async function recordFailure(scope: string, subject: string, policy: Poli
     await save(key, { ...state, failures });
     return;
   }
-  const lockMs = Math.min(policy.maxLockMs, state.lockMs ? state.lockMs * 2 : policy.lockMs);
+  const previousLockMs = now - state.lockedUntil < policy.windowMs ? state.lockMs : 0;
+  const lockMs = Math.min(policy.maxLockMs, previousLockMs ? previousLockMs * 2 : policy.lockMs);
   await save(key, { failures, lockedUntil: now + lockMs, lockMs });
 }
 
-export async function recordSuccess(scope: string, subject: string): Promise<void> {
+async function recordSuccess(scope: string, subject: string): Promise<void> {
   try {
     await keyValue.removeItem(storageKey(scope, subject));
   } catch {}
 }
 
-// Runs `action` under `policy`: refused while locked out, and every failure counts towards one.
+// Only an answer about the attempt itself counts as a failure. A network error or a server outage
+// (AuthRetryableFetchError) says nothing about it, and an unconfirmed email means the password was
+// right. The auth calls wrap Supabase's error as the `cause` of the one they throw.
+function countsAsFailure(error: unknown): boolean {
+  const cause = error instanceof Error && error.cause !== undefined ? error.cause : error;
+  if (isAuthRetryableFetchError(cause)) return false;
+  return !(isAuthError(cause) && cause.code === 'email_not_confirmed');
+}
+
+// Runs `action` under `policy`: refused while locked out, and every failed attempt counts towards one.
 export async function limited<T>(
   scope: string,
   subject: string,
@@ -87,12 +99,12 @@ export async function limited<T>(
   await assertAllowed(scope, subject);
   try {
     const result = await action();
-    // A policy with no free attempts is a cooldown: every send, successful or not, starts it.
+    // A policy with no free attempts is a cooldown: every send, successful or refused, starts it.
     if (policy.freeAttempts > 0) await recordSuccess(scope, subject);
     else await recordFailure(scope, subject, policy);
     return result;
   } catch (error) {
-    await recordFailure(scope, subject, policy);
+    if (countsAsFailure(error)) await recordFailure(scope, subject, policy);
     throw error;
   }
 }

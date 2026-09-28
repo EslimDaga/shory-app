@@ -1,4 +1,10 @@
-import type { User } from '@supabase/supabase-js';
+import {
+  isAuthRetryableFetchError,
+  type Session,
+  type SupabaseClient,
+  type User,
+} from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 import { strings } from '@/i18n/es';
 import { clearHistory } from '@/services/storage/historyStorage';
 import { clearPreferredSource } from '@/services/storage/onboardingStorage';
@@ -18,7 +24,8 @@ import {
 } from './emailAuth';
 import { isPreviewAuth } from './authConfig';
 import { signInWithGoogle, signOutOfGoogle } from './googleAuth';
-import { getSupabase } from './supabase';
+import { secureSessionStorage } from './sessionStorage';
+import { getAuthStorageKey, getSupabase } from './supabase';
 import type { AuthMethod, AuthProviderId, AuthUser } from './types';
 
 const PREVIEW_USER_KEY = 'shory.auth.previewUser';
@@ -48,6 +55,15 @@ async function savePreferredSource(preferredSource: MusicSource | null) {
   }
 }
 
+function hasAppleIdentity(user: User): boolean {
+  const providers = user.app_metadata?.providers as string[] | undefined;
+  return (
+    user.app_metadata?.provider === 'apple' ||
+    Boolean(providers?.includes('apple')) ||
+    Boolean(user.identities?.some((identity) => identity.provider === 'apple'))
+  );
+}
+
 function signInWithProvider(provider: AuthProviderId): Promise<User> {
   return provider === 'apple' ? signInWithApple() : signInWithGoogle();
 }
@@ -58,8 +74,21 @@ export async function restoreSession(): Promise<AuthUser | null> {
     return stored ? (JSON.parse(stored) as AuthUser) : null;
   }
   try {
-    const { data } = await getSupabase().auth.getSession();
-    return data.session ? toAuthUser(data.session.user) : null;
+    const { data, error } = await getSupabase().auth.getSession();
+    if (data.session) return toAuthUser(data.session.user);
+    // Offline with an expired access token, supabase-js can't refresh it and reports no session, but
+    // keeps it stored and refreshes it once the network is back: the person is still signed in.
+    return isAuthRetryableFetchError(error) ? await readStoredUser() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readStoredUser(): Promise<AuthUser | null> {
+  try {
+    const stored = await secureSessionStorage.getItem(getAuthStorageKey());
+    const session = stored ? (JSON.parse(stored) as Partial<Session>) : null;
+    return session?.refresh_token && session.user ? toAuthUser(session.user) : null;
   } catch {
     return null;
   }
@@ -68,7 +97,13 @@ export async function restoreSession(): Promise<AuthUser | null> {
 export function subscribeToSession(onChange: (user: AuthUser | null) => void): () => void {
   if (isPreviewAuth) return () => {};
   try {
-    const { data } = getSupabase().auth.onAuthStateChange((_event, session) => {
+    const { data } = getSupabase().auth.onAuthStateChange((event, session) => {
+      // restoreSession owns the starting state. Offline, INITIAL_SESSION reports no session for one
+      // that is only waiting to be refreshed, which would sign the person out.
+      if (event === 'INITIAL_SESSION') return;
+      // supabase-js also signs out by itself (refresh token revoked or expired): the device must forget
+      // that person's data then too. Clearing is idempotent, so an explicit sign-out clearing again is fine.
+      if (event === 'SIGNED_OUT') void clearLocalUserData();
       onChange(session ? toAuthUser(session.user) : null);
     });
     return () => data.subscription.unsubscribe();
@@ -97,6 +132,13 @@ async function clearLocalUserData(): Promise<void> {
   await Promise.all([clearHistory(), clearPreferredSource()]);
 }
 
+// Drops the session from this device. supabase-js can't when it fails to read the session first
+// (offline with an expired access token), so it's then removed from storage directly.
+async function dropLocalSession(supabase: SupabaseClient): Promise<void> {
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
+  if (error) await secureSessionStorage.removeItem(getAuthStorageKey());
+}
+
 export async function signOut(): Promise<void> {
   if (isPreviewAuth) {
     await keyValue.removeItem(PREVIEW_USER_KEY);
@@ -105,32 +147,38 @@ export async function signOut(): Promise<void> {
   }
   await signOutOfGoogle();
   const supabase = getSupabase();
-  // Global sign-out revokes the refresh token on the server. If that call fails (offline, server
-  // down), supabase-js keeps the local session, so it's dropped locally instead: signing out must
-  // always leave this device signed out.
+  // Global sign-out revokes the refresh token on the server. When it fails, supabase-js usually drops
+  // the local session anyway, but not when it couldn't refresh an expired one first (offline); then
+  // it's dropped here, or auto-refresh would sign the person back in once the network returns.
   const { error } = await supabase.auth.signOut();
-  if (error) await supabase.auth.signOut({ scope: 'local' });
+  if (error) await dropLocalSession(supabase);
   await clearLocalUserData();
 }
 
 export async function deleteAccount(): Promise<void> {
   if (isPreviewAuth) {
     await keyValue.removeItem(PREVIEW_USER_KEY);
+    await clearLocalUserData();
     return;
   }
   const supabase = getSupabase();
   const { data } = await supabase.auth.getSession();
   // Apple requires apps with Sign in with Apple to revoke the user's Apple tokens on deletion; that
-  // needs a fresh authorization code, so an Apple user confirms with Apple once more here.
-  const appleAuthorizationCode =
-    data.session?.user.app_metadata?.provider === 'apple' ? await requestAppleAuthorizationCode() : null;
+  // needs a fresh authorization code, so an Apple user confirms with Apple once more here. Apple may
+  // be linked to an account first created another way, so every linked provider is checked.
+  let appleAuthorizationCode: string | null = null;
+  if (data.session && hasAppleIdentity(data.session.user)) {
+    // The code can only be requested through the native iOS sheet.
+    if (Platform.OS !== 'ios') throw new Error(strings.auth.errors.appleDeleteNeedsIos);
+    appleAuthorizationCode = await requestAppleAuthorizationCode();
+  }
   const { error } = await supabase.functions.invoke('delete-account', {
     method: 'POST',
     body: appleAuthorizationCode ? { appleAuthorizationCode } : {},
   });
   if (error) throw error;
-  await signOutOfGoogle();
-  await supabase.auth.signOut({ scope: 'local' });
+  await signOutOfGoogle({ revoke: true });
+  await dropLocalSession(supabase);
   await clearLocalUserData();
 }
 

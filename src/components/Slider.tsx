@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   PanResponder,
+  Platform,
   StyleSheet,
   View,
   type GestureResponderEvent,
@@ -12,15 +13,16 @@ type Props = {
   value: number;
   onChange: (value: number) => void;
   accessibilityLabel: string;
-  step?: number;
 };
 
 const THUMB = 22;
 const TRACK = 4;
+const STEP = 0.05;
 
-export function Slider({ value, onChange, accessibilityLabel, step = 0.05 }: Props) {
+const clamp = (next: number) => Math.min(1, Math.max(0, next));
+
+export function Slider({ value, onChange, accessibilityLabel }: Props) {
   const [width, setWidth] = useState(0);
-  const clamp = (next: number) => Math.min(1, Math.max(0, next));
 
   const responder = useMemo(() => {
     const handle = (event: GestureResponderEvent) => {
@@ -39,6 +41,15 @@ export function Slider({ value, onChange, accessibilityLabel, step = 0.05 }: Pro
   const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
   const thumbLeft = value * Math.max(0, width - THUMB);
 
+  // Screen readers adjust it through the accessibility actions; a web keyboard has no such thing,
+  // so the slider takes focus and moves with the arrow keys, as a native range input does.
+  const onKeyDown = (event: { key: string; preventDefault: () => void }) => {
+    const next = KEY_STEPS[event.key]?.(value);
+    if (next === undefined) return;
+    event.preventDefault();
+    onChange(clamp(next));
+  };
+
   return (
     <View
       style={styles.root}
@@ -46,11 +57,14 @@ export function Slider({ value, onChange, accessibilityLabel, step = 0.05 }: Pro
       accessible
       accessibilityRole="adjustable"
       accessibilityLabel={accessibilityLabel}
-      accessibilityValue={{ min: 0, max: 100, now: Math.round(value * 100) }}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(value * 100)}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={(event) =>
-        onChange(clamp(value + (event.nativeEvent.actionName === 'increment' ? step : -step)))
+        onChange(clamp(value + (event.nativeEvent.actionName === 'increment' ? STEP : -STEP)))
       }
+      {...(Platform.OS === 'web' ? { tabIndex: 0 as const, onKeyDown } : null)}
       {...responder.panHandlers}
     >
       <View pointerEvents="none" style={styles.track}>
@@ -60,6 +74,15 @@ export function Slider({ value, onChange, accessibilityLabel, step = 0.05 }: Pro
     </View>
   );
 }
+
+const KEY_STEPS: Record<string, (value: number) => number> = {
+  ArrowRight: (value) => value + STEP,
+  ArrowUp: (value) => value + STEP,
+  ArrowLeft: (value) => value - STEP,
+  ArrowDown: (value) => value - STEP,
+  Home: () => 0,
+  End: () => 1,
+};
 
 const styles = StyleSheet.create({
   root: { height: THUMB + 12, justifyContent: 'center' },

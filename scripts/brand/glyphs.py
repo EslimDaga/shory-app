@@ -9,7 +9,6 @@ FONTS = {
  'brico800': os.path.join(NM, 'bricolage-grotesque/800ExtraBold/BricolageGrotesque_800ExtraBold.ttf'),
  'brico700': os.path.join(NM, 'bricolage-grotesque/700Bold/BricolageGrotesque_700Bold.ttf'),
  'brico600': os.path.join(NM, 'bricolage-grotesque/600SemiBold/BricolageGrotesque_600SemiBold.ttf'),
- 'serifIt': os.path.join(NM, 'instrument-serif/400Regular_Italic/InstrumentSerif_400Regular_Italic.ttf'),
 }
 def glyph_paths(font_key, text, size=100, tracking=0.0, x0=0, baseline=0):
     f = TTFont(FONTS[font_key]); gs = f.getGlyphSet(); cmap = f.getBestCmap()

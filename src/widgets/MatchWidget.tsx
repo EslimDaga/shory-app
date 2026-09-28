@@ -1,7 +1,8 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Shield } from 'phosphor-react-native/src/icons/Shield';
 import { useStoryClock } from '@/components/motion/StoryClock';
 import { strings } from '@/i18n/es';
+import { Crest } from './Crest';
 import { getTonePalette, type TonePalette } from './tonePalette';
 import { readData, type WidgetProps } from './types';
 import { WidgetSurface } from './WidgetSurface';
@@ -110,16 +111,16 @@ function Team({
   const empty = !name;
   return (
     <View style={styles.team}>
-      {crest ? (
-        // Official crests are drawn for light backgrounds, so they sit on a white disc on every tone.
-        <View style={[styles.crest, styles.crestDisc]}>
-          <Image source={{ uri: crest }} style={styles.logo} resizeMode="contain" />
-        </View>
-      ) : (
-        <View style={[styles.crest, styles.crestEmpty, { borderColor: palette.track }]}>
-          <Shield size={24} color={palette.onSurfaceMuted} weight="regular" />
-        </View>
-      )}
+      <Crest
+        uri={crest}
+        size={CREST}
+        logoScale={0.68}
+        placeholder={
+          <View style={[styles.crestEmpty, { borderColor: palette.track }]}>
+            <Shield size={24} color={palette.onSurfaceMuted} weight="regular" />
+          </View>
+        }
+      />
       <Text
         style={[styles.teamName, { color: empty ? palette.onSurfaceMuted : palette.onSurface }]}
         numberOfLines={1}
@@ -154,16 +155,15 @@ const styles = StyleSheet.create({
   // Two equal team columns around the score keep the crests mirrored on the card's center line.
   row: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   team: { flex: 1, alignItems: 'center', gap: 8 },
-  crest: {
+  crestEmpty: {
     width: CREST,
     height: CREST,
     borderRadius: CREST / 2,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
   },
-  crestDisc: { backgroundColor: '#FFFFFF' },
-  crestEmpty: { borderWidth: 1.5, borderStyle: 'dashed' },
-  logo: { width: CREST * 0.68, height: CREST * 0.68 },
   teamName: { fontSize: 13, fontWeight: '600', textAlign: 'center', maxWidth: 110 },
   scoreBox: { minWidth: 108, alignItems: 'center', paddingBottom: 24 },
   score: { fontSize: 40, fontWeight: '800', letterSpacing: -1, fontVariant: ['tabular-nums'] },

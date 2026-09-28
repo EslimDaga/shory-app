@@ -10,7 +10,8 @@ import { SpeakerNone } from 'phosphor-react-native/src/icons/SpeakerNone';
 import { FALLBACK_ACCENT } from '@/constants/storyBackgrounds';
 import { AudioDeviceIcon, BluetoothOutputIcon } from '@/widgets/AudioDeviceIcon';
 import { PhoneStatusBar } from './PhoneStatusBar';
-import { formatClip, heartScaleAt, marqueeOffset, TEMPLATE_SECONDS, useTemplateTime } from './templateClock';
+import { MarqueeTitle } from './MarqueeTitle';
+import { formatClip, heartScaleAt, TEMPLATE_SECONDS, useTemplateTime } from './templateClock';
 import type { TemplateProps } from './types';
 
 const HEART = '#EF4444';
@@ -61,15 +62,7 @@ export function AppleMusicTemplate({ track, background, width, height, device }:
 
       <View style={[styles.row, { paddingTop: 160 * s, paddingHorizontal: 30 * s, gap: 62 * s }]}>
         <View style={styles.titles}>
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.title,
-              { fontSize: 50 * s, transform: [{ translateX: -marqueeOffset(track.title, t, s) }] },
-            ]}
-          >
-            {track.title}
-          </Text>
+          <MarqueeTitle title={track.title} style={[styles.title, { fontSize: 50 * s }]} unit={s} />
           <Text numberOfLines={1} style={[styles.artist, { fontSize: 40 * s }]}>
             {track.artist}
           </Text>

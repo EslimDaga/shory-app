@@ -20,6 +20,7 @@ import { withAlpha } from '@/utils/color';
 import { formatDuration } from '@/utils/time';
 import { AudioDeviceIcon, BluetoothOutputIcon } from './AudioDeviceIcon';
 import { LiquidGlass } from './glass/LiquidGlass';
+import { playbackPosition } from './playback';
 import { ToneFill } from './ToneFill';
 import { getTonePalette } from './tonePalette';
 import type { WidgetProps } from './types';
@@ -28,7 +29,6 @@ export const PLAYER_SIZE = { width: 352, height: 200 };
 
 const INSET = 6;
 const PROGRESS = 0.42;
-const FALLBACK_DURATION_MS = 200000;
 
 type PlayerWidgetProps = WidgetProps & {
   liveLevels?: boolean;
@@ -47,10 +47,7 @@ export function PlayerWidget({
 }: PlayerWidgetProps) {
   const clock = useStoryClock();
   const palette = getTonePalette(tone, track.accentColor);
-  const durationMs = track.durationMs ?? FALLBACK_DURATION_MS;
-  // While a video renders, playback advances with the story clock, frame by frame.
-  const shownProgress = clock === null ? progress : Math.min(1, progress + (clock * 1000) / durationMs);
-  const elapsedMs = durationMs * shownProgress;
+  const { durationMs, shown, elapsedMs, remainingMs } = playbackPosition(track.durationMs, progress, clock);
   const iconColor = withAlpha(palette.onSurface, 0.9);
 
   return (
@@ -105,13 +102,13 @@ export function PlayerWidget({
               <View
                 style={[
                   styles.progressFill,
-                  { width: `${shownProgress * 100}%`, backgroundColor: withAlpha(palette.onSurface, 0.85) },
+                  { width: `${shown * 100}%`, backgroundColor: withAlpha(palette.onSurface, 0.85) },
                 ]}
               />
             </View>
             {!hideTimes && (
               <Text style={[styles.time, { color: palette.onSurfaceMuted }]}>
-                –{formatDuration(durationMs - elapsedMs)}
+                –{formatDuration(remainingMs)}
               </Text>
             )}
           </View>
@@ -249,20 +246,23 @@ const LEVEL_BARS = [
   { height: 11, opacity: 0.5 },
 ];
 
+const LEVEL_BAR_WIDTH = 2.4;
+const LEVEL_GAP = 2.4;
+const LEVEL_HEIGHT = 24;
+const LEVEL_MAX = Math.max(...LEVEL_BARS.map((bar) => bar.height));
+
 function LevelsIcon({ color }: { color: string }) {
-  const barWidth = 2.4;
-  const gap = 2.4;
-  const width = LEVEL_BARS.length * barWidth + (LEVEL_BARS.length - 1) * gap;
+  const width = LEVEL_BARS.length * LEVEL_BAR_WIDTH + (LEVEL_BARS.length - 1) * LEVEL_GAP;
   return (
-    <Svg width={width} height={24} viewBox={`0 0 ${width} 24`}>
+    <Svg width={width} height={LEVEL_HEIGHT} viewBox={`0 0 ${width} ${LEVEL_HEIGHT}`}>
       {LEVEL_BARS.map((bar, index) => (
         <Rect
           key={index}
-          x={index * (barWidth + gap)}
-          y={(24 - bar.height) / 2}
-          width={barWidth}
+          x={index * (LEVEL_BAR_WIDTH + LEVEL_GAP)}
+          y={(LEVEL_HEIGHT - bar.height) / 2}
+          width={LEVEL_BAR_WIDTH}
           height={bar.height}
-          rx={barWidth / 2}
+          rx={LEVEL_BAR_WIDTH / 2}
           fill={color}
           opacity={bar.opacity}
         />
@@ -270,11 +270,6 @@ function LevelsIcon({ color }: { color: string }) {
     </Svg>
   );
 }
-
-const LEVEL_BAR_WIDTH = 2.4;
-const LEVEL_GAP = 2.4;
-const LEVEL_HEIGHT = 24;
-const LEVEL_MAX = Math.max(...LEVEL_BARS.map((bar) => bar.height));
 
 function ClockLevelsIcon({ color, time }: { color: string; time: number }) {
   return (
@@ -370,10 +365,6 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  coverBackdrop: {
-    ...StyleSheet.absoluteFill,
-    transform: [{ scale: 1.3 }],
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   cover: { width: 64, height: 64, borderRadius: 11, backgroundColor: 'rgba(0, 0, 0, 0.3)' },

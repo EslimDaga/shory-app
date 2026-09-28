@@ -91,7 +91,9 @@ export function ExportProgressView({ progress, previewUri, onCancel }: Props) {
       <Text
         style={styles.percent}
         accessibilityRole="progressbar"
-        accessibilityValue={{ now: percent, min: 0, max: 100 }}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
       >
         {percent}%
       </Text>

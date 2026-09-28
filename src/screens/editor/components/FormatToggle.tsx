@@ -22,7 +22,7 @@ export function FormatToggle({ value, disabled, onChange }: Props) {
           <Pressable
             key={format}
             accessibilityRole="tab"
-            accessibilityState={{ selected: active, disabled }}
+            aria-selected={active}
             disabled={disabled}
             onPress={() => onChange(format)}
             hitSlop={6}

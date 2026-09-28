@@ -6,11 +6,13 @@ import { RAIL_TOOLS, type EditorTool, type RailTool } from '../editorTools';
 type Props = {
   activeTool: EditorTool | null;
   onToggle: (tool: RailTool) => void;
+  // A tool whose panel is open outside `activeTool` (the template sheet stands in for Customize).
+  expandedTool?: RailTool | null;
   // Icons only, so the rail doesn't cover a full-story template's own header.
   compact?: boolean;
 };
 
-export function ToolRail({ activeTool, onToggle, compact = false }: Props) {
+export function ToolRail({ activeTool, onToggle, expandedTool = null, compact = false }: Props) {
   return (
     <View style={styles.rail}>
       {RAIL_TOOLS.map(({ id, label, Icon }) => {
@@ -20,6 +22,7 @@ export function ToolRail({ activeTool, onToggle, compact = false }: Props) {
             key={id}
             accessibilityRole="button"
             accessibilityLabel={label}
+            aria-expanded={active || id === expandedTool}
             onPress={() => onToggle(id)}
             hitSlop={6}
             style={({ pressed }) => [styles.item, pressed && styles.pressed]}

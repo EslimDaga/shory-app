@@ -2,7 +2,11 @@ import { useEffect, useEffectEvent, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { pushEntering, pushExiting, type PushDirection } from '@/components/motion/pushTransition';
-import { loadPreferredSource, savePreferredSource } from '@/services/storage/onboardingStorage';
+import {
+  clearPreferredSource,
+  loadPreferredSource,
+  savePreferredSource,
+} from '@/services/storage/onboardingStorage';
 import type { MusicSource } from '@/types/music';
 import { AuthScreen, type AuthMode } from './AuthScreen';
 import { EmailAuthScreen } from './EmailAuthScreen';
@@ -51,7 +55,9 @@ export function AuthFlow({ revealed }: { revealed: boolean }) {
 
   const selectSource = (source: MusicSource | null) => {
     setPreferredSource(source);
+    // Skip and 'Uso varias' drop an earlier pick, so it isn't uploaded as the preferred source.
     if (source) savePreferredSource(source);
+    else clearPreferredSource();
     push({ name: 'how' });
   };
 

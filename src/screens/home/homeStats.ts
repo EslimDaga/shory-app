@@ -23,9 +23,9 @@ function findMostUsedSource(history: History): MusicSource | null {
 
 export function computeHomeStats(history: History, now: number): HomeStats {
   return {
-    total: history.exports.length,
+    total: history.total,
     thisWeek: history.exports.filter((timestamp) => now - timestamp < WEEK_MS).length,
-    artistCount: new Set(history.recents.map((entry) => entry.track.artist).filter(Boolean)).size,
+    artistCount: history.artists.length,
     favoriteSource: findMostUsedSource(history),
   };
 }

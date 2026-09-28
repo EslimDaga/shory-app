@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ArrowsClockwise } from 'phosphor-react-native/src/icons/ArrowsClockwise';
 import { MagnifyingGlass } from 'phosphor-react-native/src/icons/MagnifyingGlass';
 import { Shield } from 'phosphor-react-native/src/icons/Shield';
@@ -11,6 +11,7 @@ import { editorColors } from '@/theme/colors';
 import { fonts } from '@/theme/typography';
 import { getErrorMessage } from '@/utils/errors';
 import { hapticSelection, hapticSuccess } from '@/utils/haptics';
+import { Crest } from '@/widgets/Crest';
 import { CREST_KEYS, TEAM_ID_KEYS } from '@/widgets/MatchWidget';
 import type { WidgetData, WidgetLiveSource } from '@/widgets/types';
 import { COUNTRY_KEY } from '@/widgets/WeatherCardWidget';
@@ -49,20 +50,19 @@ type Status =
 // Type-ahead search: runs once typing pauses, and a slower, older answer never replaces a newer one.
 function useTypeahead<T>(query: string, search: (term: string) => Promise<T[]>) {
   const [results, setResults] = useState<{ term: string; items: T[] } | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  // Tied to its term, so an old failure doesn't linger under a cleared field or a new search.
+  const [failed, setFailed] = useState<{ term: string; message: string } | null>(null);
   const term = query.trim();
 
   useEffect(() => {
     if (term.length < 2) return;
     let active = true;
     const timer = setTimeout(() => {
+      // A retry of the same term starts clean.
+      setFailed(null);
       search(term)
-        .then((items) => {
-          if (!active) return;
-          setFailed(null);
-          setResults({ term, items });
-        })
-        .catch((error) => active && setFailed(getErrorMessage(error, text.failed)));
+        .then((items) => active && setResults({ term, items }))
+        .catch((error) => active && setFailed({ term, message: getErrorMessage(error, text.failed) }));
     }, SEARCH_DELAY_MS);
     return () => {
       active = false;
@@ -71,11 +71,12 @@ function useTypeahead<T>(query: string, search: (term: string) => Promise<T[]>) 
   }, [term, search]);
 
   const ready = term.length >= 2 && results?.term === term;
+  const error = term.length >= 2 && failed?.term === term ? failed.message : null;
   return {
     items: ready ? results.items : [],
-    searching: term.length >= 2 && !ready && !failed,
+    searching: term.length >= 2 && !ready && !error,
     empty: ready && results.items.length === 0,
-    failed,
+    failed: error,
   };
 }
 
@@ -168,13 +169,17 @@ function WeatherSearch({ onFill }: { onFill: (patch: WidgetData) => void }) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const { items, searching, empty, failed } = useTypeahead(query, searchCities);
+  // Bumped by each pick, so a slower answer for an earlier city is dropped.
+  const request = useRef(0);
 
   const choose = async (city: City) => {
+    const id = ++request.current;
     hapticSelection();
     setStatus({ kind: 'loading' });
     setQuery('');
     try {
       const weather = await fetchWeather(city);
+      if (id !== request.current) return;
       onFill({
         city: city.name,
         temp: String(weather.temp),
@@ -188,6 +193,7 @@ function WeatherSearch({ onFill }: { onFill: (patch: WidgetData) => void }) {
       hapticSuccess();
       setStatus({ kind: 'done', message: text.weatherFilled(city.name) });
     } catch (error) {
+      if (id !== request.current) return;
       setStatus({ kind: 'error', message: getErrorMessage(error, text.failed) });
     }
   };
@@ -232,6 +238,8 @@ function FootballPicker({ values, onFill }: { values: WidgetData; onFill: (patch
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const { items, searching, empty, failed } = useTypeahead(query, searchTeams);
+  // Bumped by each sync and each team pick, so a slower sync for an earlier pair is dropped.
+  const request = useRef(0);
 
   const teamIds = {
     home: Number(values[TEAM_ID_KEYS.home]) || null,
@@ -239,11 +247,15 @@ function FootballPicker({ values, onFill }: { values: WidgetData; onFill: (patch
   };
 
   const choose = (team: FootballTeam) => {
+    request.current++;
     hapticSelection();
+    // A different team makes it a different match: the synced league, score and status go too.
+    const replacing = teamIds[side] !== null && teamIds[side] !== team.id;
     onFill({
       [side]: teamLabel(team),
       [CREST_KEYS[side]]: team.crest ?? '',
       [TEAM_ID_KEYS[side]]: String(team.id),
+      ...(replacing ? { league: '', homeScore: '', awayScore: '', minute: '' } : {}),
     });
     setQuery('');
     setStatus({ kind: 'idle' });
@@ -255,10 +267,16 @@ function FootballPicker({ values, onFill }: { values: WidgetData; onFill: (patch
       setStatus({ kind: 'error', message: text.syncNeedsTeams });
       return;
     }
+    if (teamIds.home === teamIds.away) {
+      setStatus({ kind: 'error', message: text.syncSameTeam });
+      return;
+    }
+    const id = ++request.current;
     hapticSelection();
     setStatus({ kind: 'loading' });
     try {
       const match = await syncMatch(teamIds.home, teamIds.away);
+      if (id !== request.current) return;
       if (!match) {
         setStatus({ kind: 'error', message: text.noMatch });
         return;
@@ -282,6 +300,7 @@ function FootballPicker({ values, onFill }: { values: WidgetData; onFill: (patch
       hapticSuccess();
       setStatus({ kind: 'done', message: text.synced });
     } catch (error) {
+      if (id !== request.current) return;
       setStatus({ kind: 'error', message: getErrorMessage(error, text.failed) });
     }
   };
@@ -367,7 +386,7 @@ function FootballPicker({ values, onFill }: { values: WidgetData; onFill: (patch
             <Pressable
               key={option.label}
               accessibilityRole="button"
-              accessibilityState={{ selected: active }}
+              aria-selected={active}
               onPress={() => setMatchStatus(option.minute)}
               style={[styles.chip, active && styles.chipActive]}
             >
@@ -384,7 +403,7 @@ function FootballPicker({ values, onFill }: { values: WidgetData; onFill: (patch
         disabled={status.kind === 'loading'}
         style={({ pressed }) => [
           styles.action,
-          !(teamIds.home && teamIds.away) && styles.actionMuted,
+          !(teamIds.home && teamIds.away && teamIds.home !== teamIds.away) && styles.actionMuted,
           pressed && styles.pressed,
         ]}
       >
@@ -418,7 +437,7 @@ function TeamSlot({
   return (
     <Pressable
       accessibilityRole="tab"
-      accessibilityState={{ selected: active }}
+      aria-selected={active}
       accessibilityLabel={`${label}: ${name || text.noTeamYet}`}
       onPress={onPress}
       style={[styles.slot, active && styles.slotActive]}
@@ -435,17 +454,17 @@ function TeamSlot({
 }
 
 function CrestDisc({ uri, size }: { uri?: string | null; size: number }) {
-  if (!uri) {
-    return (
-      <View style={[styles.crestEmpty, { width: size, height: size, borderRadius: size / 2 }]}>
-        <Shield size={size * 0.45} color={editorColors.textMuted} />
-      </View>
-    );
-  }
   return (
-    <View style={[styles.crestDisc, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Image source={{ uri }} style={{ width: size * 0.7, height: size * 0.7 }} resizeMode="contain" />
-    </View>
+    <Crest
+      uri={uri}
+      size={size}
+      logoScale={0.7}
+      placeholder={
+        <View style={[styles.crestEmpty, { width: size, height: size, borderRadius: size / 2 }]}>
+          <Shield size={size * 0.45} color={editorColors.textMuted} />
+        </View>
+      }
+    />
   );
 }
 
@@ -559,7 +578,6 @@ const styles = StyleSheet.create({
   slotLabel: { fontFamily: fonts.sansSemiBold, fontSize: 11, color: editorColors.textMuted },
   slotName: { fontFamily: fonts.sansSemiBold, fontSize: 14, color: editorColors.text, marginTop: 1 },
   slotNameEmpty: { color: editorColors.textFaint },
-  crestDisc: { backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   crestEmpty: {
     borderWidth: 1.5,
     borderStyle: 'dashed',

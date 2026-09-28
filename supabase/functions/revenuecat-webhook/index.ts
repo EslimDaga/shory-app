@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { isUserId, refreshSubscription } from '../_shared/subscription.ts';
 
 // RevenueCat → Shory. Called by RevenueCat on every purchase, renewal, cancellation, expiration,
@@ -21,6 +21,15 @@ function safeEqual(a: string, b: string): boolean {
     difference |= (left[index] ?? 0) ^ (right[index] ?? 0);
   }
   return difference === 0;
+}
+
+// False for a deleted Shory account, whose events are skipped: there is no row to store, and
+// reading it from RevenueCat would re-create the subscriber that delete-account removed.
+async function accountExists(db: SupabaseClient, userId: string): Promise<boolean> {
+  const { data, error } = await db.auth.admin.getUserById(userId);
+  if (error?.status === 404) return false;
+  if (error) throw error;
+  return data.user !== null;
 }
 
 type WebhookEvent = {
@@ -60,11 +69,17 @@ Deno.serve(async (request) => {
   ];
 
   const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-  try {
-    for (const userId of userIds) await refreshSubscription(db, userId);
-  } catch (error) {
+  // Every account is refreshed even if another one fails. Retrying the whole event is harmless: a
+  // refresh only re-reads RevenueCat and writes the same rows again.
+  const results = await Promise.allSettled(
+    userIds.map(async (userId) => {
+      if (await accountExists(db, userId)) await refreshSubscription(db, userId);
+    }),
+  );
+  const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+  if (failures.length > 0) {
     // A non-2xx answer makes RevenueCat retry the event later.
-    console.error('revenuecat-webhook: refresh failed', event.type, error);
+    console.error('revenuecat-webhook: refresh failed', event.type, failures);
     return json(500, { error: 'refresh_failed' });
   }
   return json(200, { ok: true, users: userIds.length });

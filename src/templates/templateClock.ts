@@ -18,10 +18,3 @@ export function formatClip(seconds: number): string {
 export function heartScaleAt(seconds: number): number {
   return 1 + Math.sin((seconds / TEMPLATE_SECONDS) * 16 * Math.PI) * 0.2;
 }
-
-// Long titles scroll sideways like Spotify's marquee; short ones stay put.
-export function marqueeOffset(title: string, seconds: number, unit: number): number {
-  if (title.length <= 24) return 0;
-  const span = title.length * 10 * unit;
-  return (seconds * 60 * unit) % span;
-}

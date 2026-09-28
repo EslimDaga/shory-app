@@ -10,18 +10,18 @@ export function createAutoBackground(accentColor: string | null): GradientBackgr
   return { kind: 'gradient', id: AUTO_BACKGROUND_ID, top, bottom: mixColors(top, '#000000', 0.78) };
 }
 
+// The bottom of a gradient made from one picked color (custom, Magic, and the picker's preview).
+export function gradientBottom(color: string): string {
+  return mixColors(color, '#000000', 0.72);
+}
+
 export const CUSTOM_BACKGROUND_ID = 'custom';
 
 export function createCustomBackground(color: string): GradientBackground {
-  return {
-    kind: 'gradient',
-    id: CUSTOM_BACKGROUND_ID,
-    top: color,
-    bottom: mixColors(color, '#000000', 0.72),
-  };
+  return { kind: 'gradient', id: CUSTOM_BACKGROUND_ID, top: color, bottom: gradientBottom(color) };
 }
 
-export const MAGIC_BACKGROUND_PREFIX = 'magic-';
+const MAGIC_BACKGROUND_PREFIX = 'magic-';
 
 // A color pulled from the song's cover or the chosen photo, as a story gradient.
 export function createMagicBackground(color: string): GradientBackground {
@@ -29,7 +29,7 @@ export function createMagicBackground(color: string): GradientBackground {
     kind: 'gradient',
     id: `${MAGIC_BACKGROUND_PREFIX}${color}`,
     top: color,
-    bottom: mixColors(color, '#000000', 0.72),
+    bottom: gradientBottom(color),
   };
 }
 

@@ -32,9 +32,12 @@ const withoutAppleSignIn: ConfigPlugin = (config) =>
     return mod;
   });
 
-// RevenueCat's Test Store key simulates purchases: shipping it would give Pro away for free.
-if (IS_PRODUCTION_BUILD && process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY?.startsWith('test_')) {
-  throw new Error('Production builds need the App Store RevenueCat key (appl_…), not the Test Store key.');
+// Only the App Store public key belongs in the bundle: a Test Store key (test_) would give Pro away
+// for free, and a secret key (sk_) would be published inside the app.
+if (IS_PRODUCTION_BUILD && !process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY?.startsWith('appl_')) {
+  throw new Error(
+    'Production builds need the App Store RevenueCat key (appl_…), not a Test Store or secret key.',
+  );
 }
 
 export default ({ config }: ConfigContext): ExpoConfig => {
