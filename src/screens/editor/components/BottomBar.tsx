@@ -3,12 +3,13 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { DownloadIcon } from '@/components/Icons';
 import { strings } from '@/i18n/es';
 import { editorColors } from '@/theme/colors';
-import type { StoryBackground } from '@/types/storyBackground';
+import type { GradientBackground, PhotoBackground } from '@/types/storyBackground';
 import type { ExportAction } from '../hooks/useStoryExport';
 import { Shutter } from './Shutter';
 
 type Props = {
-  background: StoryBackground;
+  // A still picture of the background (a video shows its first frame).
+  background: GradientBackground | PhotoBackground;
   coverUrl: string;
   pendingAction: ExportAction | null;
   backgroundTrayOpen: boolean;

@@ -21,7 +21,7 @@ export function LiquidGlass({ widgetWidth, widgetHeight, inset, fallbackImageUri
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {backdrop ? (
+      {backdrop?.adaptive ? null : backdrop ? (
         <BackdropSlice
           backdrop={backdrop}
           widgetWidth={widgetWidth}
@@ -29,13 +29,9 @@ export function LiquidGlass({ widgetWidth, widgetHeight, inset, fallbackImageUri
           inset={inset}
         />
       ) : (
-        <Image
-          source={{ uri: fallbackImageUri }}
-          style={styles.fallback}
-          blurRadius={FALLBACK_BLUR}
-        />
+        <Image source={{ uri: fallbackImageUri }} style={styles.fallback} blurRadius={FALLBACK_BLUR} />
       )}
-      <View style={styles.tint} />
+      <View style={backdrop?.adaptive ? styles.adaptiveTint : styles.tint} />
       <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
         <Defs>
           <LinearGradient id="glass-sheen" x1="0" y1="0" x2="0.35" y2="1">
@@ -120,6 +116,8 @@ function BackgroundFill({
       />
     );
   }
+  // A video background never gets here: glass over a moving clip renders adaptive (translucent).
+  if (background.kind === 'video') return null;
   return (
     <Svg width="100%" height="100%">
       <Defs>
@@ -141,5 +139,9 @@ const styles = StyleSheet.create({
   tint: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(18, 18, 20, 0.24)',
+  },
+  adaptiveTint: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(18, 18, 20, 0.42)',
   },
 });

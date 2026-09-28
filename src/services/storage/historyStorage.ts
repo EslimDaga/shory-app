@@ -24,6 +24,15 @@ export async function loadHistory(): Promise<History> {
   }
 }
 
+export async function clearHistory(): Promise<void> {
+  try {
+    const file = historyFile();
+    if (file.exists) file.delete();
+  } catch {
+    return;
+  }
+}
+
 export async function recordExport(history: History, track: TrackMetadata): Promise<History> {
   const next = appendExport(history, track, Date.now());
   try {

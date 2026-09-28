@@ -5,8 +5,12 @@ import type { History } from '@/types/history';
 import type { TrackMetadata } from '@/types/music';
 import { brand, homeColors } from '@/theme/colors';
 import { fonts } from '@/theme/typography';
+import { useAuth } from '@/providers/AuthProvider';
 import { hapticSelection } from '@/utils/haptics';
+import { AccountButton } from './components/AccountButton';
+import { AccountSheet } from './components/AccountSheet';
 import { HelpButton } from './components/HelpButton';
+import { HelpSheet } from './components/HelpSheet';
 import { HowItWorks } from './components/HowItWorks';
 import { OutlinedLogo } from './components/OutlinedLogo';
 import { PasteLinkButton } from './components/PasteLinkButton';
@@ -29,12 +33,17 @@ type Props = {
 export function HomeScreen({ loading, error, history, onPasteLink, onOpenRecent }: Props) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
-  const [helpVisible, setHelpVisible] = useState(false);
+  const { user } = useAuth();
+  const [sheet, setSheet] = useState<'help' | 'account' | null>(null);
   const [now] = useState(() => Date.now());
 
   const stats = computeHomeStats(history, now);
   const hasRecents = history.recents.length > 0;
-  const showSteps = helpVisible || !hasRecents;
+
+  const openSheet = (next: 'help' | 'account') => {
+    hapticSelection();
+    setSheet(next);
+  };
 
   return (
     <View style={styles.screen}>
@@ -50,15 +59,10 @@ export function HomeScreen({ loading, error, history, onPasteLink, onOpenRecent 
       >
         <View style={styles.topBar}>
           <OutlinedLogo />
-          {hasRecents && (
-            <HelpButton
-              expanded={helpVisible}
-              onPress={() => {
-                hapticSelection();
-                setHelpVisible((visible) => !visible);
-              }}
-            />
-          )}
+          <View style={styles.topActions}>
+            {hasRecents && <HelpButton onPress={() => openSheet('help')} />}
+            <AccountButton user={user} onPress={() => openSheet('account')} />
+          </View>
         </View>
 
         <StoriesCounter total={stats.total} />
@@ -66,7 +70,7 @@ export function HomeScreen({ loading, error, history, onPasteLink, onOpenRecent 
         <View style={styles.card}>
           <StatsRow stats={stats} />
           <View style={styles.cardDivider} />
-          {showSteps ? (
+          {!hasRecents ? (
             <HowItWorks />
           ) : (
             <RecentTracks
@@ -96,6 +100,9 @@ export function HomeScreen({ loading, error, history, onPasteLink, onOpenRecent 
           }}
         />
       </View>
+
+      <HelpSheet visible={sheet === 'help'} onClose={() => setSheet(null)} />
+      <AccountSheet visible={sheet === 'account'} onClose={() => setSheet(null)} />
     </View>
   );
 }
@@ -110,6 +117,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  topActions: { flexDirection: 'row', gap: 10 },
   card: {
     backgroundColor: homeColors.card,
     borderRadius: 34,

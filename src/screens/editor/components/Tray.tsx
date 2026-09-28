@@ -2,9 +2,12 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Animated, Easing, ScrollView, StyleSheet } from 'react-native';
 import { editorColors } from '@/theme/colors';
 
-type Props = { children: ReactNode };
+type Props = {
+  children: ReactNode;
+  scroll?: boolean;
+};
 
-export function Tray({ children }: Props) {
+export function Tray({ children, scroll = true }: Props) {
   const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
@@ -22,15 +25,17 @@ export function Tray({ children }: Props) {
         styles.tray,
         {
           opacity: progress,
-          transform: [
-            { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) },
-          ],
+          transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
         },
       ]}
     >
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {children}
-      </ScrollView>
+      {scroll ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.content}>
+          {children}
+        </ScrollView>
+      ) : (
+        children
+      )}
     </Animated.View>
   );
 }

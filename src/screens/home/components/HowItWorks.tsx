@@ -3,10 +3,10 @@ import { strings } from '@/i18n/es';
 import { brand, homeColors } from '@/theme/colors';
 import { fonts } from '@/theme/typography';
 
-export function HowItWorks() {
+export function HowItWorks({ showTitle = true }: { showTitle?: boolean }) {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{strings.home.howItWorks}</Text>
+      {showTitle && <Text style={styles.title}>{strings.home.howItWorks}</Text>}
       {strings.home.steps.map((step, index) => (
         <View key={step} style={styles.step}>
           <View style={styles.badge}>

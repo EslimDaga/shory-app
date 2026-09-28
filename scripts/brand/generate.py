@@ -7,8 +7,8 @@ and `npm install` so the Bricolage Grotesque font files exist in node_modules.
 """
 import json, os, subprocess, tempfile
 from PIL import Image
-from brand import CREAM, INK, LIME, WHITE, monogram, svg, tidy, wordmark
-from glyphs import ROOT
+from brand import CREAM, INK, LIME, PROGRESS, WHITE, monogram, svg, tidy, wordmark
+from glyphs import ROOT, glyph_paths, text_path
 
 ASSETS = os.path.join(ROOT, 'assets')
 BRAND = os.path.join(ASSETS, 'brand')
@@ -52,8 +52,35 @@ const jobs = JSON.parse(require('fs').readFileSync(process.argv.at(-1), 'utf8'))
 """
 
 
+LOGO_TS = os.path.join(ROOT, 'src', 'components', 'splash', 'logoGlyphs.ts')
+
+
+def write_logo_glyphs(tracking=-0.035, bar_h=11, gap=30, knob_r=10.5, pad=24):
+    """Per-letter wordmark outlines plus bar geometry, so the splash can animate each piece."""
+    _, _, boxes = text_path('brico800', 'shory', 100, tracking)
+    left = boxes[0][0]; right = boxes[-1][2]; top = min(b[1] for b in boxes)
+    length = right - left
+    view_box = [left - pad, top - pad, length + 2 * pad, (gap + bar_h / 2 + knob_r) - top + 2 * pad]
+    letters = [tidy(g) for g in glyph_paths('brico800', 'shory', 100, tracking)]
+    r = lambda v: round(v, 2)
+    lines = [
+        'export const LOGO_VIEW_BOX = ' + json.dumps([r(v) for v in view_box]) + ' as const;',
+        '',
+        'export const LOGO_LETTERS = ' + json.dumps(letters, indent=2) + ' as const;',
+        '',
+        'export const LOGO_BAR = ' + json.dumps({
+            'x': r(left), 'y': gap, 'width': r(length), 'height': bar_h,
+            'knobRadius': knob_r, 'progress': PROGRESS,
+        }, indent=2) + ' as const;',
+    ]
+    os.makedirs(os.path.dirname(LOGO_TS), exist_ok=True)
+    with open(LOGO_TS, 'w') as f:
+        f.write('\n'.join(lines) + '\n')
+
+
 def main():
     os.makedirs(BRAND, exist_ok=True)
+    write_logo_glyphs()
     for name, (vb, body) in LOGOS.items():
         with open(os.path.join(BRAND, name), 'w') as f:
             f.write(svg(vb, body) + '\n')
@@ -75,7 +102,7 @@ def main():
         image = Image.open(os.path.join(tmp, name))
         image = image.convert('RGB' if opaque else 'RGBA')
         image.save(os.path.join(ASSETS, name), optimize=True)
-    print(f'Wrote {len(LOGOS)} SVGs to assets/brand and {len(ICONS)} PNGs to assets')
+    print(f'Wrote {len(LOGOS)} SVGs to assets/brand, the splash glyphs and {len(ICONS)} PNGs to assets')
 
 
 if __name__ == '__main__':

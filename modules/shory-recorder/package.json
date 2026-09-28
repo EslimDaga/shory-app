@@ -1,0 +1,10 @@
+{
+  "name": "shory-recorder",
+  "version": "1.0.0",
+  "description": "Renders a view frame by frame into an MP4 video",
+  "main": "src/index.ts",
+  "license": "MIT",
+  "author": "Shory",
+  "homepage": "https://shory.app",
+  "private": true
+}

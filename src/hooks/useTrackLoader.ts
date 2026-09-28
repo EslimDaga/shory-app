@@ -65,9 +65,7 @@ export function useTrackLoader() {
   }, []);
 
   const error =
-    state.status === 'idle'
-      ? (state.error ?? (shareIntentError ? String(shareIntentError) : null))
-      : null;
+    state.status === 'idle' ? (state.error ?? (shareIntentError ? strings.errors.unknown : null)) : null;
 
   return { state, error, loadFromClipboard, openTrack, close };
 }

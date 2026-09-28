@@ -1,15 +1,27 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import Share, { Social } from 'react-native-share';
 import { strings } from '@/i18n/es';
 
-export type InstagramStoryPayload = {
-  /** Full 9:16 story, widget already composited at the position chosen in the editor. */
-  storyImageUri: string;
-  linkUrl?: string;
-};
+export type InstagramStoryPayload =
+  | { backgroundImageUri: string; stickerImageUri?: string; linkUrl?: string }
+  | { backgroundVideoUri: string; linkUrl?: string };
 
 const FACEBOOK_APP_ID = process.env.EXPO_PUBLIC_FB_APP_ID ?? '';
 const INSTAGRAM_ANDROID_PACKAGE = 'com.instagram.android';
+
+// Instagram's own story camera. Stories started there can carry a song (the Music sticker);
+// stories handed over by another app can't — Instagram blocks music on those.
+const STORY_CAMERA_URLS = ['instagram://story-camera', 'instagram://camera', 'instagram://app'];
+
+export async function openInstagramStoryCamera(): Promise<void> {
+  for (const url of STORY_CAMERA_URLS) {
+    try {
+      await Linking.openURL(url);
+      return;
+    } catch {}
+  }
+  throw new Error(strings.errors.instagramNotInstalled);
+}
 
 export async function shareToInstagramStories(payload: InstagramStoryPayload): Promise<void> {
   if (!FACEBOOK_APP_ID) throw new Error(strings.errors.instagramAppIdMissing);
@@ -22,9 +34,9 @@ export async function shareToInstagramStories(payload: InstagramStoryPayload): P
   await Share.shareSingle({
     social: Social.InstagramStories,
     appId: FACEBOOK_APP_ID,
-    // Sent as the background rather than a sticker: the Stories API has no way to place a
-    // sticker, so Instagram would always drop it in the center.
-    backgroundImage: payload.storyImageUri,
+    ...('backgroundVideoUri' in payload
+      ? { backgroundVideo: payload.backgroundVideoUri }
+      : { backgroundImage: payload.backgroundImageUri, stickerImage: payload.stickerImageUri }),
     attributionURL: payload.linkUrl,
     linkUrl: payload.linkUrl,
   });

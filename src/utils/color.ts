@@ -38,3 +38,40 @@ export function withAlpha(hex: string, alpha: number): string {
 export function rgbToHex(red: number, green: number, blue: number): string {
   return toHex([red, green, blue]);
 }
+
+export type Hsv = { h: number; s: number; v: number };
+
+export function hsvToHex({ h, s, v }: Hsv): string {
+  const f = (n: number) => {
+    const k = (n + h / 60) % 6;
+    return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+  };
+  return toHex([f(5) * 255, f(3) * 255, f(1) * 255]);
+}
+
+export function hexToHsv(hex: string): Hsv {
+  const [r, g, b] = parseHex(hex).map((c) => c / 255);
+  const max = Math.max(r, g, b);
+  const delta = max - Math.min(r, g, b);
+  let h = 0;
+  if (delta > 0) {
+    if (max === r) h = 60 * (((g - b) / delta) % 6);
+    else if (max === g) h = 60 * ((b - r) / delta + 2);
+    else h = 60 * ((r - g) / delta + 4);
+  }
+  return { h: (h + 360) % 360, s: max === 0 ? 0 : delta / max, v: max };
+}
+
+const between = (min: number, max: number, random: () => number) => min + (max - min) * random();
+
+export function randomGradientColors(random: () => number = Math.random): { top: string; bottom: string } {
+  const hue = between(0, 360, random);
+  const shift = between(18, 48, random) * (random() > 0.5 ? 1 : -1);
+  const top = hsvToHex({ h: hue, s: between(0.45, 0.85, random), v: between(0.86, 1, random) });
+  const bottom = hsvToHex({
+    h: (hue + shift + 360) % 360,
+    s: between(0.65, 0.95, random),
+    v: between(0.3, 0.52, random),
+  });
+  return { top, bottom };
+}

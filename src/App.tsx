@@ -1,27 +1,57 @@
+import { useState } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ScreenTransition } from '@/components/ScreenTransition';
+import { AnimatedSplash } from '@/components/splash/AnimatedSplash';
 import { useAppFonts } from '@/hooks/useAppFonts';
 import { useHistory } from '@/hooks/useHistory';
 import { useTrackLoader } from '@/hooks/useTrackLoader';
+import { Paywall } from '@/components/Paywall';
+import { AuthProvider, useAuth } from '@/providers/AuthProvider';
+import { SubscriptionProvider } from '@/providers/SubscriptionProvider';
+import { AuthFlow } from '@/screens/auth/AuthFlow';
+import { NewPasswordScreen } from '@/screens/auth/NewPasswordScreen';
 import { EditorScreen } from '@/screens/editor/EditorScreen';
 import { HomeScreen } from '@/screens/home/HomeScreen';
 import { editorColors } from '@/theme/colors';
 
+SplashScreen.preventAutoHideAsync();
+
 export default function App() {
+  return (
+    <SafeAreaProvider style={styles.root}>
+      <AuthProvider>
+        <SubscriptionProvider>
+          <AppContent />
+          <Paywall />
+        </SubscriptionProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
+  );
+}
+
+function AppContent() {
   const fontsLoaded = useAppFonts();
+  const { status, recovering } = useAuth();
+  const [splashDone, setSplashDone] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const { history, addExport } = useHistory();
   const { state, error, loadFromClipboard, openTrack, close } = useTrackLoader();
 
-  if (!fontsLoaded) return <View style={styles.splash} />;
-
-  const isEditing = state.status === 'ready';
+  const ready = fontsLoaded && status !== 'restoring';
+  const signedIn = status === 'signedIn';
+  const isEditing = signedIn && state.status === 'ready';
 
   return (
-    <SafeAreaProvider style={styles.root}>
-      <StatusBar style={isEditing ? 'light' : 'dark'} />
-      {isEditing ? (
+    <>
+      <StatusBar style={isEditing && splashDone ? 'light' : 'dark'} />
+      {!ready ? null : !signedIn ? (
+        <AuthFlow revealed={revealed} />
+      ) : recovering ? (
+        <NewPasswordScreen />
+      ) : isEditing ? (
         <ScreenTransition key={`editor:${state.track.url}`} variant="zoom">
           <EditorScreen track={state.track} onClose={close} onExported={addExport} />
         </ScreenTransition>
@@ -36,11 +66,17 @@ export default function App() {
           />
         </ScreenTransition>
       )}
-    </SafeAreaProvider>
+      {splashDone ? null : (
+        <AnimatedSplash
+          ready={ready}
+          onExitStart={() => setRevealed(true)}
+          onFinish={() => setSplashDone(true)}
+        />
+      )}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  splash: { flex: 1, backgroundColor: editorColors.background },
   root: { backgroundColor: editorColors.background },
 });
