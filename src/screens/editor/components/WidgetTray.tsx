@@ -23,8 +23,21 @@ const TILE_HEIGHT = 50;
 
 export function WidgetTray({ track, selectedId, configFor, onSelect, onOpenLibrary }: Props) {
   const { isPro } = useSubscription();
+  const library = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={strings.editor.library.open}
+      onPress={onOpenLibrary}
+      style={({ pressed }) => [styles.libraryItem, pressed && styles.pressed]}
+    >
+      <View style={[styles.tile, styles.libraryTile]}>
+        <LibraryIcon size={22} color={editorColors.text} />
+      </View>
+    </Pressable>
+  );
+
   return (
-    <Tray>
+    <Tray leading={library}>
       {WIDGETS.map((widget) => {
         const active = widget.id === selectedId;
         const locked = widget.pro && !isPro;
@@ -51,17 +64,6 @@ export function WidgetTray({ track, selectedId, configFor, onSelect, onOpenLibra
           </Pressable>
         );
       })}
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={strings.editor.library.open}
-        onPress={onOpenLibrary}
-        style={({ pressed }) => [styles.item, pressed && styles.pressed]}
-      >
-        <View style={[styles.tile, styles.libraryTile]}>
-          <LibraryIcon size={22} color={editorColors.text} />
-        </View>
-      </Pressable>
     </Tray>
   );
 }
@@ -82,5 +84,6 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   tileActive: { borderColor: editorColors.accent },
-  libraryTile: { borderColor: editorColors.hairline, borderStyle: 'dashed' },
+  libraryItem: { alignItems: 'center' },
+  libraryTile: { width: TILE_HEIGHT, borderColor: editorColors.hairline, borderStyle: 'dashed' },
 });
