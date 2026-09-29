@@ -44,3 +44,13 @@ yarn-error.*
 
 # python
 __pycache__/
+
+# Supabase CLI local state
+supabase/.temp/
+
+# Playwright e2e
+/.e2e-dist/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

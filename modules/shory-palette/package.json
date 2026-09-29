@@ -1,0 +1,10 @@
+{
+  "name": "shory-palette",
+  "version": "1.0.0",
+  "description": "Samples an image's pixels so the app can build a color palette from it",
+  "main": "src/index.ts",
+  "license": "MIT",
+  "author": "Shory",
+  "homepage": "https://shory.app",
+  "private": true
+}

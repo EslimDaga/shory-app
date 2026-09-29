@@ -1,5 +1,6 @@
 import { strings } from '@/i18n/es';
 import type { TrackMetadata } from '@/types/music';
+import { fetchWithTimeout, toHttps } from '@/utils/http';
 
 type LookupResult = {
   wrapperType: 'track' | 'collection' | 'artist';
@@ -32,7 +33,7 @@ function parseIds(url: string) {
 
 async function fetchAccentColor(url: string): Promise<string | null> {
   try {
-    const html = await (await fetch(url)).text();
+    const html = await (await fetchWithTimeout(url)).text();
     const hex = html.match(BACKGROUND_COLOR_PATTERN)?.[1];
     return hex ? `#${hex.toLowerCase()}` : null;
   } catch {
@@ -41,12 +42,15 @@ async function fetchAccentColor(url: string): Promise<string | null> {
 }
 
 export async function fetchAppleMusicMetadata(rawUrl: string): Promise<TrackMetadata> {
-  const url = rawUrl.split('&')[0].replace(/[?&]uo=\d+/, '');
-  const { country, id } = parseIds(url);
+  const fullUrl = toHttps(rawUrl);
+  // Read the ids before cleaning: the song id (i=) can come after tracking params like uo=.
+  const { country, id } = parseIds(fullUrl);
   if (!id) throw new Error(strings.errors.appleSongNotFound);
+  const songId = fullUrl.match(SONG_QUERY_PATTERN)?.[1];
+  const url = fullUrl.split(/[?#]/)[0] + (songId ? `?i=${songId}` : '');
 
   const [lookup, accentColor] = await Promise.all([
-    fetch(`https://itunes.apple.com/lookup?id=${id}&country=${country}`).then((r) => r.json()),
+    fetchWithTimeout(`https://itunes.apple.com/lookup?id=${id}&country=${country}`).then((r) => r.json()),
     fetchAccentColor(url),
   ]);
   const item: LookupResult | undefined = lookup?.results?.[0];

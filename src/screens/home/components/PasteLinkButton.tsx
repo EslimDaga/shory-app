@@ -2,6 +2,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { strings } from '@/i18n/es';
 import { brand } from '@/theme/colors';
 import { fonts } from '@/theme/typography';
+import { withAlpha } from '@/utils/color';
 
 type Props = {
   loading: boolean;
@@ -12,7 +13,8 @@ export function PasteLinkButton({ loading, onPress }: Props) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={strings.home.pasteLinkLabel}
+      aria-label={loading ? strings.home.readingLink : strings.home.pasteLinkLabel}
+      aria-busy={loading}
       disabled={loading}
       onPress={onPress}
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}
@@ -41,10 +43,8 @@ const styles = StyleSheet.create({
     backgroundColor: brand[950],
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: brand[950],
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
+    // iOS draws blurRadius / 2 as the layer's shadowRadius, so 32 keeps the previous 16.
+    boxShadow: [{ offsetX: 0, offsetY: 8, blurRadius: 32, color: withAlpha(brand[950], 0.3) }],
   },
   pressed: { transform: [{ scale: 0.98 }] },
   content: { flexDirection: 'row', alignItems: 'center', gap: 10 },

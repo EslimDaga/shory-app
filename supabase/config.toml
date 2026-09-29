@@ -1,0 +1,8 @@
+project_id = "shory-app"
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.revenuecat-webhook]
+# Called by RevenueCat, which authenticates with its own shared secret, not a Supabase JWT.
+verify_jwt = false

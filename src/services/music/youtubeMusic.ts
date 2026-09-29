@@ -1,5 +1,6 @@
 import { strings } from '@/i18n/es';
 import type { TrackMetadata } from '@/types/music';
+import { fetchWithTimeout } from '@/utils/http';
 
 type OEmbedResponse = {
   title: string;
@@ -47,7 +48,7 @@ function splitArtistAndTitle(rawTitle: string, author: string) {
 async function pickCover(videoId: string, fallback: string): Promise<string> {
   const maxResolution = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
   try {
-    const response = await fetch(maxResolution, { method: 'HEAD' });
+    const response = await fetchWithTimeout(maxResolution, { method: 'HEAD' });
     return response.ok ? maxResolution : fallback;
   } catch {
     return fallback;
@@ -59,7 +60,7 @@ export async function fetchYouTubeMusicMetadata(rawUrl: string): Promise<TrackMe
   if (!videoId) throw new Error(strings.errors.youtubeVideoNotFound);
 
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`,
   );
   if (!response.ok) throw new Error(strings.errors.youtubeStatus(response.status));

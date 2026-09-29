@@ -1,30 +1,54 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { useEffect, useState } from 'react';
+import { Image, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import Animated, {
+  Easing,
+  cancelAnimation,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
+import Svg, { Path, Rect } from 'react-native-svg';
+import { levelAt, useStoryClock } from '@/components/motion/StoryClock';
 import { SourceLogo } from '@/components/SourceLogo';
 import { withAlpha } from '@/utils/color';
 import { formatDuration } from '@/utils/time';
+import { AudioDeviceIcon, BluetoothOutputIcon } from './AudioDeviceIcon';
 import { LiquidGlass } from './glass/LiquidGlass';
+import { playbackPosition } from './playback';
+import { ToneFill } from './ToneFill';
 import { getTonePalette } from './tonePalette';
-import type { WidgetProps, WidgetTone } from './types';
+import type { WidgetProps } from './types';
 
 export const PLAYER_SIZE = { width: 352, height: 200 };
 
 const INSET = 6;
 const PROGRESS = 0.42;
-const FALLBACK_DURATION_MS = 200000;
-const COVER_BLUR = 30;
 
-const TINTS: Partial<Record<WidgetTone, string>> = {
-  dark: 'rgba(28, 28, 26, 0.5)',
-  light: 'rgba(247, 244, 238, 0.76)',
+type PlayerWidgetProps = WidgetProps & {
+  liveLevels?: boolean;
+  playing?: boolean;
 };
 
-export function PlayerWidget({ track, tone }: WidgetProps) {
+export function PlayerWidget({
+  track,
+  tone,
+  outputDevice,
+  liveLevels = false,
+  playing,
+  progress = PROGRESS,
+  hideCover = false,
+  hideTimes = false,
+}: PlayerWidgetProps) {
+  const clock = useStoryClock();
   const palette = getTonePalette(tone, track.accentColor);
-  const durationMs = track.durationMs ?? FALLBACK_DURATION_MS;
-  const elapsedMs = durationMs * PROGRESS;
+  const { durationMs, shown, elapsedMs, remainingMs } = playbackPosition(track.durationMs, progress, clock);
   const iconColor = withAlpha(palette.onSurface, 0.9);
-  const tint = TINTS[tone];
 
   return (
     <View style={styles.root}>
@@ -33,7 +57,6 @@ export function PlayerWidget({ track, tone }: WidgetProps) {
           styles.card,
           {
             borderColor: tone === 'glass' ? 'rgba(255, 255, 255, 0.42)' : palette.hairline,
-            backgroundColor: tone === 'accent' ? palette.surface : 'transparent',
           },
         ]}
       >
@@ -45,15 +68,10 @@ export function PlayerWidget({ track, tone }: WidgetProps) {
             fallbackImageUri={track.coverUrl}
           />
         )}
-        {tint && (
-          <>
-            <Image source={{ uri: track.coverUrl }} style={styles.coverBackdrop} blurRadius={COVER_BLUR} />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} />
-          </>
-        )}
+        {tone !== 'glass' && <ToneFill palette={palette} id="player" />}
 
         <View style={styles.header}>
-          <Image source={{ uri: track.coverUrl }} style={styles.cover} />
+          {!hideCover && <Image source={{ uri: track.coverUrl }} style={styles.cover} />}
           <View style={styles.titles}>
             <Text style={[styles.title, { color: palette.onSurface }]} numberOfLines={1}>
               {track.title}
@@ -64,19 +82,46 @@ export function PlayerWidget({ track, tone }: WidgetProps) {
               </Text>
             ) : null}
           </View>
+          {clock !== null ? (
+            <ClockLevelsIcon color={palette.onSurface} time={clock} />
+          ) : liveLevels ? (
+            <LiveLevelsIcon color={palette.onSurface} />
+          ) : (
+            <LevelsIcon color={palette.onSurface} />
+          )}
         </View>
 
-        <View style={styles.progressRow}>
-          <Text style={[styles.time, { color: palette.onSurfaceMuted }]}>
-            {formatDuration(elapsedMs)}
-          </Text>
-          <View style={[styles.progressTrack, { backgroundColor: palette.track }]}>
-            <View style={[styles.progressFill, { backgroundColor: withAlpha(palette.onSurface, 0.85) }]} />
+        {playing === undefined ? (
+          <View style={styles.progressRow}>
+            {!hideTimes && (
+              <Text style={[styles.time, { color: palette.onSurfaceMuted }]}>
+                {formatDuration(elapsedMs)}
+              </Text>
+            )}
+            <View style={[styles.progressTrack, { backgroundColor: palette.track }]}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${shown * 100}%`, backgroundColor: withAlpha(palette.onSurface, 0.85) },
+                ]}
+              />
+            </View>
+            {!hideTimes && (
+              <Text style={[styles.time, { color: palette.onSurfaceMuted }]}>
+                –{formatDuration(remainingMs)}
+              </Text>
+            )}
           </View>
-          <Text style={[styles.time, { color: palette.onSurfaceMuted }]}>
-            –{formatDuration(durationMs - elapsedMs)}
-          </Text>
-        </View>
+        ) : (
+          <LiveProgressRow
+            playing={playing}
+            startAt={progress}
+            durationMs={durationMs}
+            timeColor={palette.onSurfaceMuted}
+            trackColor={palette.track}
+            fillColor={withAlpha(palette.onSurface, 0.85)}
+          />
+        )}
 
         <View style={styles.controls}>
           <View style={[styles.sideSlot, styles.leadingSlot]}>
@@ -88,7 +133,11 @@ export function PlayerWidget({ track, tone }: WidgetProps) {
             <SkipIcon color={iconColor} />
           </View>
           <View style={styles.sideSlot}>
-            <AirPlayIcon color={withAlpha(palette.onSurface, 0.6)} />
+            {outputDevice ? (
+              <AudioDeviceIcon device={outputDevice} color={withAlpha(palette.onSurface, 0.75)} size={24} />
+            ) : (
+              <BluetoothOutputIcon color={withAlpha(palette.onSurface, 0.6)} />
+            )}
           </View>
         </View>
       </View>
@@ -96,11 +145,84 @@ export function PlayerWidget({ track, tone }: WidgetProps) {
   );
 }
 
+// The outgoing slide keeps playing while it crossfades away, then pauses in place.
+const PAUSE_DELAY_MS = 700;
+
+function LiveProgressRow({
+  playing,
+  startAt,
+  durationMs,
+  timeColor,
+  trackColor,
+  fillColor,
+}: {
+  playing: boolean;
+  startAt: number;
+  durationMs: number;
+  timeColor: string;
+  trackColor: string;
+  fillColor: string;
+}) {
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(startAt);
+  const trackWidth = useSharedValue(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(Math.floor((startAt * durationMs) / 1000));
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    if (playing) {
+      // Resume from wherever this song was left, at real speed. It never rewinds.
+      const remaining = 1 - progress.value;
+      progress.value = withTiming(1, { duration: durationMs * remaining, easing: Easing.linear });
+      return;
+    }
+    const pause = setTimeout(() => cancelAnimation(progress), PAUSE_DELAY_MS);
+    return () => clearTimeout(pause);
+  }, [playing, durationMs, progress, reduceMotion]);
+
+  // Only the clock crosses to JS, and only when the displayed second actually changes.
+  useAnimatedReaction(
+    () => Math.floor((progress.value * durationMs) / 1000),
+    (seconds, previous) => {
+      if (seconds !== previous) scheduleOnRN(setElapsedSeconds, seconds);
+    },
+  );
+
+  const fillStyle = useAnimatedStyle(() => ({
+    opacity: trackWidth.value > 0 ? 1 : 0,
+    transform: [{ translateX: (progress.value - 1) * trackWidth.value }],
+  }));
+
+  const onTrackLayout = (event: LayoutChangeEvent) => {
+    trackWidth.value = event.nativeEvent.layout.width;
+  };
+
+  const elapsedMs = elapsedSeconds * 1000;
+
+  return (
+    <View style={styles.progressRow}>
+      <Text style={[styles.time, { color: timeColor }]}>{formatDuration(elapsedMs)}</Text>
+      <View style={[styles.progressTrack, { backgroundColor: trackColor }]} onLayout={onTrackLayout}>
+        <Animated.View style={[styles.liveFill, { backgroundColor: fillColor }, fillStyle]} />
+      </View>
+      <Text style={[styles.time, { color: timeColor }]}>–{formatDuration(durationMs - elapsedMs)}</Text>
+    </View>
+  );
+}
+
 function SkipIcon({ color, flipped }: { color: string; flipped?: boolean }) {
   return (
     <Svg width={34} height={34} viewBox="0 0 24 24" fill={color} style={flipped ? styles.flipped : undefined}>
-      <Path d="M12.8 6.8v10.4c0 .8.9 1.3 1.6.8l6.7-5.2a1 1 0 0 0 0-1.6l-6.7-5.2c-.7-.5-1.6 0-1.6.8Z" stroke={color} strokeLinejoin="round" />
-      <Path d="M3 6.8v10.4c0 .8.9 1.3 1.6.8l6.7-5.2a1 1 0 0 0 0-1.6L4.6 6c-.7-.5-1.6 0-1.6.8Z" stroke={color} strokeLinejoin="round" />
+      <Path
+        d="M12.8 6.8v10.4c0 .8.9 1.3 1.6.8l6.7-5.2a1 1 0 0 0 0-1.6l-6.7-5.2c-.7-.5-1.6 0-1.6.8Z"
+        stroke={color}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 6.8v10.4c0 .8.9 1.3 1.6.8l6.7-5.2a1 1 0 0 0 0-1.6L4.6 6c-.7-.5-1.6 0-1.6.8Z"
+        stroke={color}
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
@@ -114,15 +236,115 @@ function PauseIcon({ color }: { color: string }) {
   );
 }
 
-function AirPlayIcon({ color }: { color: string }) {
+const LEVEL_BARS = [
+  { height: 7, opacity: 0.45 },
+  { height: 10, opacity: 0.55 },
+  { height: 13, opacity: 0.6 },
+  { height: 9, opacity: 0.5 },
+  { height: 17, opacity: 0.85 },
+  { height: 22, opacity: 0.7 },
+  { height: 11, opacity: 0.5 },
+];
+
+const LEVEL_BAR_WIDTH = 2.4;
+const LEVEL_GAP = 2.4;
+const LEVEL_HEIGHT = 24;
+const LEVEL_MAX = Math.max(...LEVEL_BARS.map((bar) => bar.height));
+
+function LevelsIcon({ color }: { color: string }) {
+  const width = LEVEL_BARS.length * LEVEL_BAR_WIDTH + (LEVEL_BARS.length - 1) * LEVEL_GAP;
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round">
-      <Path d="M7.1 17.2a7.5 7.5 0 1 1 9.8 0" />
-      <Path d="M9.2 14.6a4.2 4.2 0 1 1 5.6 0" />
-      <Circle cx={12} cy={11.5} r={1} fill={color} stroke="none" />
-      <Path d="M12 15.8 16.2 21H7.8Z" fill={color} stroke="none" />
+    <Svg width={width} height={LEVEL_HEIGHT} viewBox={`0 0 ${width} ${LEVEL_HEIGHT}`}>
+      {LEVEL_BARS.map((bar, index) => (
+        <Rect
+          key={index}
+          x={index * (LEVEL_BAR_WIDTH + LEVEL_GAP)}
+          y={(LEVEL_HEIGHT - bar.height) / 2}
+          width={LEVEL_BAR_WIDTH}
+          height={bar.height}
+          rx={LEVEL_BAR_WIDTH / 2}
+          fill={color}
+          opacity={bar.opacity}
+        />
+      ))}
     </Svg>
   );
+}
+
+function ClockLevelsIcon({ color, time }: { color: string; time: number }) {
+  return (
+    <View style={styles.levels}>
+      {LEVEL_BARS.map((bar, index) => (
+        <View
+          key={index}
+          style={[
+            styles.levelBar,
+            {
+              backgroundColor: color,
+              opacity: bar.opacity,
+              transform: [{ scaleY: levelAt(index, bar.height / LEVEL_MAX, time) }],
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+function LiveLevelsIcon({ color }: { color: string }) {
+  return (
+    <View style={styles.levels}>
+      {LEVEL_BARS.map((bar, index) => (
+        <LiveLevelBar
+          key={index}
+          index={index}
+          rest={bar.height / LEVEL_MAX}
+          opacity={bar.opacity}
+          color={color}
+        />
+      ))}
+    </View>
+  );
+}
+
+function LiveLevelBar({
+  index,
+  rest,
+  opacity,
+  color,
+}: {
+  index: number;
+  rest: number;
+  opacity: number;
+  color: string;
+}) {
+  const reduceMotion = useReducedMotion();
+  const level = useSharedValue(rest);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    // Each bar gets its own rhythm so the meter never looks like it's looping.
+    const beat = 260 + ((index * 97) % 180);
+    const peak = Math.min(1, rest + 0.45);
+    const dip = Math.max(0.18, rest - 0.4);
+    const ease = Easing.inOut(Easing.quad);
+    level.value = withDelay(
+      index * 70,
+      withRepeat(
+        withSequence(
+          withTiming(peak, { duration: beat, easing: ease }),
+          withTiming(dip, { duration: beat * 1.3, easing: ease }),
+          withTiming((peak + rest) / 2, { duration: beat * 0.9, easing: ease }),
+          withTiming(rest, { duration: beat, easing: ease }),
+        ),
+        -1,
+      ),
+    );
+  }, [index, level, rest, reduceMotion]);
+
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scaleY: level.value }] }));
+
+  return <Animated.View style={[styles.levelBar, { backgroundColor: color, opacity }, animatedStyle]} />;
 }
 
 const styles = StyleSheet.create({
@@ -144,10 +366,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
   },
-  coverBackdrop: {
-    ...StyleSheet.absoluteFill,
-    transform: [{ scale: 1.3 }],
-  },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   cover: { width: 64, height: 64, borderRadius: 11, backgroundColor: 'rgba(0, 0, 0, 0.3)' },
   titles: { flex: 1 },
@@ -156,10 +374,13 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20 },
   time: { fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
   progressTrack: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
-  progressFill: { width: `${PROGRESS * 100}%`, height: '100%', borderRadius: 3 },
+  progressFill: { height: '100%', borderRadius: 3 },
+  liveFill: { width: '100%', height: '100%', borderRadius: 3 },
   controls: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-  sideSlot: { width: 32, alignItems: 'flex-end' },
+  sideSlot: { width: 34, alignItems: 'flex-end' },
   leadingSlot: { alignItems: 'flex-start' },
   transport: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 38 },
   flipped: { transform: [{ scaleX: -1 }] },
+  levels: { flexDirection: 'row', alignItems: 'center', gap: LEVEL_GAP, height: LEVEL_HEIGHT },
+  levelBar: { width: LEVEL_BAR_WIDTH, height: LEVEL_MAX, borderRadius: LEVEL_BAR_WIDTH / 2 },
 });

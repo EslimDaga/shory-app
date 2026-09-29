@@ -1,37 +1,39 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
+import { QuestionIcon } from '@/components/Icons';
 import { strings } from '@/i18n/es';
 import { brand, homeColors } from '@/theme/colors';
-import { fonts } from '@/theme/typography';
 
 type Props = {
-  expanded: boolean;
   onPress: () => void;
 };
 
-export function HelpButton({ expanded, onPress }: Props) {
+export function HelpButton({ onPress }: Props) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={expanded ? strings.home.hideHelp : strings.home.howItWorks}
+      accessibilityLabel={strings.home.openHelp}
+      accessibilityHint={strings.help.subtitle}
       onPress={onPress}
+      hitSlop={6}
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}
     >
-      <Text style={styles.label}>{expanded ? '×' : '?'}</Text>
+      <QuestionIcon size={26} color={brand[600]} />
     </Pressable>
   );
 }
 
+export const TOP_BUTTON_SIZE = 50;
+
 const styles = StyleSheet.create({
   button: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: TOP_BUTTON_SIZE,
+    height: TOP_BUTTON_SIZE,
+    borderRadius: TOP_BUTTON_SIZE / 2,
     backgroundColor: homeColors.dark,
     borderWidth: 1.5,
     borderColor: homeColors.darkBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.7 },
-  label: { fontFamily: fonts.sansExtraBold, fontSize: 24, color: brand[600], marginTop: -2 },
+  pressed: { opacity: 0.7, transform: [{ scale: 0.94 }] },
 });

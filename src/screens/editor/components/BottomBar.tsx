@@ -3,12 +3,13 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { DownloadIcon } from '@/components/Icons';
 import { strings } from '@/i18n/es';
 import { editorColors } from '@/theme/colors';
-import type { StoryBackground } from '@/types/storyBackground';
+import type { GradientBackground, PhotoBackground } from '@/types/storyBackground';
 import type { ExportAction } from '../hooks/useStoryExport';
 import { Shutter } from './Shutter';
 
 type Props = {
-  background: StoryBackground;
+  // A still picture of the background (a video shows its first frame).
+  background: GradientBackground | PhotoBackground;
   coverUrl: string;
   pendingAction: ExportAction | null;
   backgroundTrayOpen: boolean;
@@ -31,7 +32,7 @@ export function BottomBar({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={strings.editor.changeBackground}
-        accessibilityState={{ expanded: backgroundTrayOpen }}
+        aria-expanded={backgroundTrayOpen}
         onPress={onToggleBackgroundTray}
         style={({ pressed }) => [
           styles.backgroundThumb,
@@ -54,7 +55,13 @@ export function BottomBar({
         )}
       </Pressable>
 
-      <Shutter coverUrl={coverUrl} spinning={pendingAction === 'share'} onPress={onShare} />
+      {/* Blocked during a save too: a share started then would silently do nothing. */}
+      <Shutter
+        coverUrl={coverUrl}
+        spinning={pendingAction === 'share'}
+        disabled={pendingAction !== null}
+        onPress={onShare}
+      />
 
       <Pressable
         accessibilityRole="button"

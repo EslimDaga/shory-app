@@ -6,11 +6,13 @@ import { editorColors } from '@/theme/colors';
 
 type Props = {
   coverUrl: string;
+  // The disc spins while a share runs.
   spinning: boolean;
+  disabled: boolean;
   onPress: () => void;
 };
 
-export function Shutter({ coverUrl, spinning, onPress }: Props) {
+export function Shutter({ coverUrl, spinning, disabled, onPress }: Props) {
   const [rotation] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export function Shutter({ coverUrl, spinning, onPress }: Props) {
       accessibilityRole="button"
       accessibilityLabel={strings.editor.shareToStories}
       onPress={onPress}
-      disabled={spinning}
+      disabled={disabled}
       style={({ pressed }) => [styles.ring, pressed && styles.pressed]}
     >
       <Animated.View style={[styles.disc, { transform: [{ rotate }] }]}>

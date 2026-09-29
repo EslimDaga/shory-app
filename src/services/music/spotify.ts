@@ -1,6 +1,7 @@
 import { strings } from '@/i18n/es';
 import type { TrackMetadata } from '@/types/music';
 import { rgbToHex } from '@/utils/color';
+import { fetchWithTimeout, toHttps } from '@/utils/http';
 
 type SpotifyEntityType = 'track' | 'album' | 'playlist' | 'artist' | 'episode' | 'show';
 
@@ -16,8 +17,7 @@ type EmbedDetails = {
   durationMs: number | null;
 };
 
-const SPOTIFY_URL_PATTERN =
-  /https?:\/\/(?:open\.spotify\.com|spotify\.link|spotify\.app\.link)\/[^\s"'<>]+/i;
+const SPOTIFY_URL_PATTERN = /https?:\/\/(?:open\.spotify\.com|spotify\.link|spotify\.app\.link)\/[^\s"'<>]+/i;
 const OPEN_URL_PATTERN = /https:\/\/open\.spotify\.com\/[a-z-]+\/[A-Za-z0-9]+/;
 const ENTITY_TYPE_PATTERN = /open\.spotify\.com\/(track|album|playlist|artist|episode|show)\//;
 const NEXT_DATA_PATTERN = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/;
@@ -36,7 +36,7 @@ function normalizeOpenUrl(url: string): string {
 }
 
 async function resolveShortLink(url: string): Promise<string> {
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(toHttps(url));
   if (response.url.includes('open.spotify.com')) return response.url;
   const found = (await response.text()).match(OPEN_URL_PATTERN);
   if (!found) throw new Error(strings.errors.spotifyShortLink);
@@ -49,15 +49,16 @@ function getEntityType(openUrl: string): SpotifyEntityType | null {
 
 async function fetchEmbedDetails(iframeUrl: string): Promise<EmbedDetails> {
   try {
-    const html = await (await fetch(iframeUrl)).text();
+    // The embed URL comes from Spotify's response; only ever follow it to Spotify itself.
+    const embed = new URL(iframeUrl);
+    if (embed.protocol !== 'https:' || embed.hostname !== 'open.spotify.com') return EMPTY_DETAILS;
+    const html = await (await fetchWithTimeout(embed.toString())).text();
     const json = html.match(NEXT_DATA_PATTERN)?.[1];
     if (!json) return EMPTY_DETAILS;
 
     const entity = JSON.parse(json)?.props?.pageProps?.state?.data?.entity;
     const artists: { name: string }[] | undefined = entity?.artists;
-    const artist = artists?.length
-      ? artists.map((a) => a.name).join(', ')
-      : (entity?.subtitle ?? null);
+    const artist = artists?.length ? artists.map((a) => a.name).join(', ') : (entity?.subtitle ?? null);
 
     const base = entity?.visualIdentity?.backgroundBase;
     const accentColor = base ? rgbToHex(base.red, base.green, base.blue) : null;
@@ -73,7 +74,7 @@ export async function fetchSpotifyMetadata(rawUrl: string): Promise<TrackMetadat
   const resolved = rawUrl.includes('open.spotify.com') ? rawUrl : await resolveShortLink(rawUrl);
   const url = normalizeOpenUrl(resolved);
 
-  const response = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`);
+  const response = await fetchWithTimeout(`https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`);
   if (!response.ok) throw new Error(strings.errors.spotifyStatus(response.status));
   const data: OEmbedResponse = await response.json();
 

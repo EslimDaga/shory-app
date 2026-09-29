@@ -3,7 +3,21 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "shory-recorder": [
+        "./modules/shory-recorder/src"
+      ],
+      "shory-palette": [
+        "./modules/shory-palette/src"
+      ]
     }
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "supabase",
+    "e2e",
+    "playwright.config.ts"
+  ]
 }

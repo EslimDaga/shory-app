@@ -39,3 +39,23 @@ export const homeColors = {
   dark: 'rgba(24, 31, 0, 0.88)',
   darkBorder: 'rgba(204, 255, 0, 0.35)',
 } as const;
+
+export const splashColors = {
+  background: '#FFFFFF',
+  ink: '#0A0A09',
+  track: 'rgba(10, 10, 9, 0.14)',
+  orbCore: brand[600],
+  orbMid: brand[400],
+  orbRim: brand[200],
+  orbTint: '#8CF5C8',
+} as const;
+
+export const onboardingColors = {
+  background: '#FFFFFF',
+  ink: '#0A0A09',
+  inkMuted: '#6B6F63',
+  row: '#F4F5F0',
+  track: '#EDEFE6',
+  progress: brand[600],
+  error: '#C8321F',
+} as const;

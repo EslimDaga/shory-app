@@ -18,11 +18,12 @@ const OUTLINE_OFFSETS: [number, number][] = [
 
 export function OutlinedLogo() {
   return (
-    <View accessibilityRole="header" accessibilityLabel={BRAND_NAME}>
+    // One header element: `accessible` groups the copies on iOS, aria-hidden drops them elsewhere.
+    <View accessible accessibilityRole="header" accessibilityLabel={BRAND_NAME}>
       {OUTLINE_OFFSETS.map(([x, y]) => (
         <Text
           key={`${x}:${y}`}
-          importantForAccessibility="no"
+          aria-hidden
           style={[styles.logo, styles.outline, { transform: [{ translateX: x }, { translateY: y }] }]}
         >
           {BRAND_NAME}

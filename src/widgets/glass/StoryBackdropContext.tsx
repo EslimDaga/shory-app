@@ -9,8 +9,10 @@ export type StoryBackdrop = {
   canvasScale: number;
   storyWidth: number;
   storyHeight: number;
-  /** Keeps the widget hidden until the returned release callback runs, so it never paints half-built. */
   holdReveal: () => () => void;
+  // Exporting a movable Instagram sticker: a baked background slice would stop matching once the
+  // sticker moves, so glass renders truly translucent and blends with whatever ends up behind it.
+  adaptive?: boolean;
 };
 
 export const StoryBackdropContext = createContext<StoryBackdrop | null>(null);

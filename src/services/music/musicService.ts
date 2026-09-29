@@ -1,36 +1,32 @@
-import { strings } from '@/i18n/es';
-import type { MusicLink, MusicSource, TrackMetadata } from '@/types/music';
+import { SUPPORTED_SOURCES, type MusicLink, type MusicSource, type TrackMetadata } from '@/types/music';
 import { extractAppleMusicUrl, fetchAppleMusicMetadata } from './appleMusic';
 import { extractSpotifyUrl, fetchSpotifyMetadata } from './spotify';
 import { extractYouTubeMusicUrl, fetchYouTubeMusicMetadata } from './youtubeMusic';
 
 type MusicProvider = {
-  source: MusicSource;
   extractUrl: (text: string) => string | null;
   fetchMetadata: (url: string) => Promise<TrackMetadata>;
 };
 
-const PROVIDERS: MusicProvider[] = [
-  { source: 'spotify', extractUrl: extractSpotifyUrl, fetchMetadata: fetchSpotifyMetadata },
-  {
-    source: 'youtube-music',
-    extractUrl: extractYouTubeMusicUrl,
-    fetchMetadata: fetchYouTubeMusicMetadata,
-  },
-  { source: 'apple-music', extractUrl: extractAppleMusicUrl, fetchMetadata: fetchAppleMusicMetadata },
-];
+const PROVIDERS: Record<MusicSource, MusicProvider> = {
+  spotify: { extractUrl: extractSpotifyUrl, fetchMetadata: fetchSpotifyMetadata },
+  'youtube-music': { extractUrl: extractYouTubeMusicUrl, fetchMetadata: fetchYouTubeMusicMetadata },
+  'apple-music': { extractUrl: extractAppleMusicUrl, fetchMetadata: fetchAppleMusicMetadata },
+};
+
+// A link that ends a sentence ("escucha esto: https://….") picks up the punctuation. No provider's
+// URL ends in one of these, and Spotify rejects the link if it stays.
+const TRAILING_PUNCTUATION = /[.,;:!?)\]}]+$/;
 
 export function extractMusicLink(text: string | null | undefined): MusicLink | null {
   if (!text) return null;
-  for (const provider of PROVIDERS) {
-    const url = provider.extractUrl(text);
-    if (url) return { source: provider.source, url };
+  for (const source of SUPPORTED_SOURCES) {
+    const url = PROVIDERS[source].extractUrl(text)?.replace(TRAILING_PUNCTUATION, '');
+    if (url) return { source, url };
   }
   return null;
 }
 
 export function fetchTrackMetadata(link: MusicLink): Promise<TrackMetadata> {
-  const provider = PROVIDERS.find((p) => p.source === link.source);
-  if (!provider) throw new Error(strings.errors.unsupportedSource(link.source));
-  return provider.fetchMetadata(link.url);
+  return PROVIDERS[link.source].fetchMetadata(link.url);
 }

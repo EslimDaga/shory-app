@@ -1,76 +1,76 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { LibraryIcon } from '@/components/Icons';
+import { ProBadge } from '@/components/ProBadge';
+import { useSubscription } from '@/providers/SubscriptionProvider';
 import { strings } from '@/i18n/es';
 import { editorColors } from '@/theme/colors';
-import { fonts } from '@/theme/typography';
 import type { TrackMetadata } from '@/types/music';
 import { WIDGETS } from '@/widgets/registry';
-import type { WidgetDefinition, WidgetTone } from '@/widgets/types';
+import type { WidgetConfig, WidgetDefinition } from '@/widgets/types';
 import { Tray } from './Tray';
+import { WidgetPreview } from './WidgetPreview';
 
 type Props = {
   track: TrackMetadata;
-  tone: WidgetTone;
   selectedId: string;
+  configFor: (widget: WidgetDefinition) => WidgetConfig;
   onSelect: (widget: WidgetDefinition) => void;
+  onOpenLibrary: () => void;
 };
 
-const TILE_WIDTH = 96;
-const TILE_HEIGHT = 58;
+const TILE_WIDTH = 76;
+const TILE_HEIGHT = 50;
 
-export function WidgetTray({ track, tone, selectedId, onSelect }: Props) {
+export function WidgetTray({ track, selectedId, configFor, onSelect, onOpenLibrary }: Props) {
+  const { isPro } = useSubscription();
+  const library = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={strings.editor.library.open}
+      onPress={onOpenLibrary}
+      style={({ pressed }) => [styles.libraryItem, pressed && styles.pressed]}
+    >
+      <View style={[styles.tile, styles.libraryTile]}>
+        <LibraryIcon size={22} color={editorColors.text} />
+      </View>
+    </Pressable>
+  );
+
   return (
-    <Tray>
-      {WIDGETS.map((widget) => (
-        <WidgetTile
-          key={widget.id}
-          widget={widget}
-          track={track}
-          tone={tone}
-          active={widget.id === selectedId}
-          onPress={() => onSelect(widget)}
-        />
-      ))}
+    <Tray leading={library}>
+      {WIDGETS.map((widget) => {
+        const active = widget.id === selectedId;
+        const locked = widget.pro && !isPro;
+        const label = strings.editor.widgetOption(widget.name);
+        return (
+          <Pressable
+            key={widget.id}
+            accessibilityRole="button"
+            aria-selected={active}
+            accessibilityLabel={locked ? strings.paywall.proLockedOption(label) : label}
+            onPress={() => onSelect(widget)}
+            style={({ pressed }) => [styles.item, pressed && styles.pressed]}
+          >
+            <View style={[styles.tile, active && styles.tileActive]}>
+              <WidgetPreview
+                widget={widget}
+                track={track}
+                config={configFor(widget)}
+                width={TILE_WIDTH}
+                height={TILE_HEIGHT}
+              />
+              {locked && <ProBadge style={styles.proBadge} />}
+            </View>
+          </Pressable>
+        );
+      })}
     </Tray>
   );
 }
 
-function WidgetTile({
-  widget,
-  track,
-  tone,
-  active,
-  onPress,
-}: {
-  widget: WidgetDefinition;
-  track: TrackMetadata;
-  tone: WidgetTone;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const scale = Math.min((TILE_WIDTH - 10) / widget.width, (TILE_HEIGHT - 6) / widget.height);
-  const { Component } = widget;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={strings.editor.widgetOption(widget.name)}
-      onPress={onPress}
-      style={({ pressed }) => [styles.wrapper, pressed && styles.pressed]}
-    >
-      <View style={[styles.tile, active && styles.active]}>
-        <View
-          pointerEvents="none"
-          style={{ width: widget.width, height: widget.height, transform: [{ scale }] }}
-        >
-          <Component track={track} tone={tone} />
-        </View>
-      </View>
-      <Text style={[styles.name, active && styles.nameActive]}>{widget.name.toUpperCase()}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  wrapper: { alignItems: 'center', gap: 5 },
+  proBadge: { position: 'absolute', top: 4, right: 4 },
+  item: { alignItems: 'center', width: TILE_WIDTH },
   pressed: { opacity: 0.6 },
   tile: {
     width: TILE_WIDTH,
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  active: { borderColor: editorColors.accent },
-  name: { fontFamily: fonts.mono, fontSize: 8.5, letterSpacing: 1.3, color: editorColors.textFaint },
-  nameActive: { color: editorColors.text },
+  tileActive: { borderColor: editorColors.accent },
+  libraryItem: { alignItems: 'center' },
+  libraryTile: { width: TILE_HEIGHT, borderColor: editorColors.hairline, borderStyle: 'dashed' },
 });
