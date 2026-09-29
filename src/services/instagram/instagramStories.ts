@@ -11,20 +11,6 @@ const INSTAGRAM_ANDROID_PACKAGE = 'com.instagram.android';
 // Declared in LSApplicationQueriesSchemes (react-native-share plugin in app.json), so iOS answers.
 const INSTAGRAM_STORIES_URL = 'instagram-stories://share';
 
-// Instagram's own story camera. Stories started there can carry a song (the Music sticker);
-// stories handed over by another app can't — Instagram blocks music on those.
-const STORY_CAMERA_URLS = ['instagram://story-camera', 'instagram://camera', 'instagram://app'];
-
-export async function openInstagramStoryCamera(): Promise<void> {
-  for (const url of STORY_CAMERA_URLS) {
-    try {
-      await Linking.openURL(url);
-      return;
-    } catch {}
-  }
-  throw new Error(strings.errors.instagramNotInstalled);
-}
-
 export async function shareToInstagramStories(payload: InstagramStoryPayload): Promise<void> {
   if (!FACEBOOK_APP_ID) throw new Error(strings.errors.instagramAppIdMissing);
 

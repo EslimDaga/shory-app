@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { BackHandler, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CloseIcon } from '@/components/Icons';
 import {
@@ -38,7 +37,6 @@ import { CustomizePanel } from './components/CustomizePanel';
 import { FormatToggle } from './components/FormatToggle';
 import { ExportProgressView } from './components/ExportProgressView';
 import { GlassButton } from './components/GlassButton';
-import { ShareSheet } from './components/ShareSheet';
 import { StoryCanvas, type StoryCanvasHandle } from './components/StoryCanvas';
 import { Toast, type ToastMessage } from './components/Toast';
 import { ToolRail } from './components/ToolRail';
@@ -89,7 +87,6 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
   // Each template keeps its own edits (cover, song, device…), like each widget keeps its config.
   const [templateEdits, setTemplateEdits] = useState<Record<string, Partial<TemplateContent>>>({});
   const [templateSheetOpen, setTemplateSheetOpen] = useState(false);
-  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [format, setFormat] = useState<ExportFormat>('photo');
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({ width: 0, height: 0 });
@@ -144,7 +141,6 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
     videoExport,
     recording,
     shareToStories,
-    shareWithMusic,
     saveStory,
     shareVideo,
     saveVideo,
@@ -499,34 +495,14 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
           if (pendingAction) return;
           setActiveTool(null);
           if (!ensureProForExport()) return;
-          setShareSheetOpen(true);
+          if (exportFormat === 'video') shareVideo();
+          else shareToStories();
         }}
         onSave={() => {
           setActiveTool(null);
           if (!ensureProForExport()) return;
           if (exportFormat === 'video') saveVideo();
           else saveStory();
-        }}
-      />
-
-      <ShareSheet
-        visible={shareSheetOpen}
-        onClose={() => setShareSheetOpen(false)}
-        onWithSong={async () => {
-          setShareSheetOpen(false);
-          // A save started while the sheet was open: the share wouldn't run, so leave the clipboard.
-          if (pendingAction) return;
-          // The song's name goes to the clipboard, ready to paste into Instagram's Music search.
-          const shown = templateContent ?? { title: track.title, artist: track.artist ?? '' };
-          const song = [shown.title, shown.artist].filter(Boolean).join(' - ');
-          await Clipboard.setStringAsync(song).catch(() => undefined);
-          showMessage(strings.editor.share.songCopied(song));
-          shareWithMusic(exportFormat === 'video');
-        }}
-        onDirect={() => {
-          setShareSheetOpen(false);
-          if (exportFormat === 'video') shareVideo();
-          else shareToStories();
         }}
       />
 
