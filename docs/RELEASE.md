@@ -13,9 +13,10 @@ Todo el código está listo. Lo que falta son cuentas, IDs y credenciales. Sígu
 
 ## 0. Login con email
 
-- Ya configurado: Redirect URL `shoryapp://auth-callback**` en Supabase → Authentication → URL Configuration (para confirmar cuenta y recuperar contraseña).
-- **Pendiente — SMTP propio:** el correo por defecto de Supabase solo envía a los miembros de tu organización y con un límite muy bajo por hora. Antes de lanzar, configura un SMTP (Resend, Postmark, SES…) en Supabase → Authentication → Emails → SMTP Settings. Sin esto, los usuarios reales no reciben el correo de confirmación ni el de recuperar contraseña.
-- Opcional: traduce las plantillas de correo (Confirm signup, Reset password) al español en Authentication → Emails.
+- Redirect URL `shoryapp://auth-callback**` y Site URL `shoryapp://auth-callback` en Supabase → Authentication → URL Configuration. La Site URL es a donde va un link que no dice a dónde volver; si queda en `http://localhost:3000` (el valor por defecto), esos links se rompen.
+- SMTP: Gmail (`smtp.gmail.com`, puerto 465, remitente `eslimdaga@gmail.com`) con una contraseña de aplicación de Google. Límite de Supabase: 30 correos por hora. Si la app crece, pasa a un dominio propio con Resend o Postmark.
+- Código de confirmación: **6 dígitos**, vence en 1 hora (Sign In / Providers → Email). La app dice "código de 6 dígitos"; si cambias el largo, cambia también ese texto.
+- Plantillas de correo: `supabase/templates/confirmation.html` (asunto `{{ .Token }} es tu código de Shory`) y `recovery.html` (asunto `Restablece tu contraseña de Shory`). Se pegan a mano en Authentication → Emails → Templates: si editas un archivo, vuelve a pegarlo ahí. La de confirmación tiene que llevar `{{ .Token }}`, porque la app pide el código.
 
 ## 1. Apple Developer Program (USD 99/año)
 
