@@ -464,6 +464,11 @@ export const strings = {
       device: 'Dispositivo',
     },
   },
+  crash: {
+    title: 'Algo se rompió',
+    body: 'Ya nos llegó el aviso para arreglarlo. Vuelve a intentarlo y sigue con tu historia.',
+    retry: 'Volver a intentar',
+  },
   errors: {
     unknown: 'Algo salió mal. Inténtalo de nuevo.',
     timeout: 'Tardó demasiado en responder. Revisa tu conexión e inténtalo de nuevo.',

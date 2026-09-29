@@ -8,8 +8,12 @@ import {
   type AuthProviderId,
   type AuthUser,
 } from '@/services/auth/types';
+import { createLogger } from '@/services/observability/logger';
+import { setObservabilityUser } from '@/services/observability/sentry';
 import { loadPreferredSource } from '@/services/storage/onboardingStorage';
 import { getErrorMessage } from '@/utils/errors';
+
+const log = createLogger('auth');
 
 type AuthStatus = 'restoring' | 'signedOut' | 'signedIn';
 
@@ -64,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyUser = useCallback((next: AuthUser | null) => {
     setUser((current) => (sameUser(current, next) ? current : next));
     setStatus(next ? 'signedIn' : 'signedOut');
+    setObservabilityUser(next?.id ?? null);
     if (!next) setRecovering(false);
   }, []);
 
@@ -91,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (result.kind === 'recovery') setRecovering(true);
       } catch (caught) {
         // A malformed link or an unconfigured backend: say so rather than leave an unhandled rejection.
+        log.error('auth link failed', caught);
         setError(getErrorMessage(caught));
       }
     };
@@ -107,7 +113,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       return await action();
     } catch (caught) {
-      if (!(caught instanceof AuthCancelledError)) setError(getErrorMessage(caught));
+      if (caught instanceof AuthCancelledError) return null;
+      // Mostly wrong passwords and taken emails: the person's mistake, so a warning, not an issue.
+      log.warn('auth action failed', {
+        method,
+        errorName: caught instanceof Error ? caught.name : typeof caught,
+        errorMessage: caught instanceof Error ? caught.message : undefined,
+      });
+      setError(getErrorMessage(caught));
       return null;
     } finally {
       pendingRef.current = false;
@@ -189,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (caught) {
       // Backing out of the Apple confirmation just leaves the account as it was.
       if (caught instanceof AuthCancelledError) return;
+      log.error('delete account failed', caught);
       throw new Error(strings.auth.errors.deleteFailed(getErrorMessage(caught)));
     }
   };

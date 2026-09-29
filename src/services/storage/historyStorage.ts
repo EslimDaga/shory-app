@@ -1,7 +1,10 @@
 import { File, Paths } from 'expo-file-system';
 import { EMPTY_HISTORY, type History, type HistoryEntry } from '@/types/history';
+import { createLogger } from '@/services/observability/logger';
 import type { TrackMetadata } from '@/types/music';
 import { appendExport } from './historyReducer';
+
+const log = createLogger('history');
 
 const HISTORY_FILE_NAME = 'shory-history.json';
 
@@ -40,8 +43,8 @@ function saveHistory(userId: string, history: History): void {
     const file = historyFile();
     if (!file.exists) file.create();
     file.write(JSON.stringify({ userId, ...history } satisfies StoredHistory));
-  } catch {
-    return;
+  } catch (error) {
+    log.error('history save failed', error);
   }
 }
 
@@ -57,7 +60,9 @@ export async function loadHistory(userId: string): Promise<History> {
     // A file from before history was tied to an account goes to the first account that loads it.
     if (stored.userId === undefined) saveHistory(userId, history);
     return history;
-  } catch {
+  } catch (error) {
+    // A corrupt file starts the history over: the person loses their list, so it's worth knowing.
+    log.error('history load failed', error);
     return EMPTY_HISTORY;
   }
 }

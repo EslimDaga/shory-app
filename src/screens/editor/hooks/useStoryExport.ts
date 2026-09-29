@@ -6,11 +6,16 @@ import { saveToPhotos } from '@/services/media/photoLibrary';
 import { deleteFile, fileExists } from '@/services/media/tempFiles';
 import { renderStoryVideo } from '@/services/media/videoExport';
 import { captureScreenStill, captureStickerLayer, captureStoryImage } from '@/services/media/viewCapture';
+import { createLogger } from '@/services/observability/logger';
 import type { TrackMetadata } from '@/types/music';
 import { getErrorMessage } from '@/utils/errors';
 import { RecordingCancelledError } from 'shory-recorder';
 import type { StoryCanvasHandle } from '../components/StoryCanvas';
 import { hapticImpact, hapticSelection, hapticSuccess } from '@/utils/haptics';
+
+const log = createLogger('export');
+
+type ExportKind = 'photo' | 'video' | 'template' | 'photo-with-song' | 'video-with-song';
 
 export type ExportAction = 'share' | 'save';
 
@@ -75,6 +80,7 @@ export function useStoryExport({
 
   const run = async (
     action: ExportAction,
+    kind: ExportKind,
     haptic: () => void,
     task: () => Promise<void>,
     onError: (error: unknown) => void,
@@ -83,9 +89,14 @@ export function useStoryExport({
     busy.current = true;
     haptic();
     setPendingAction(action);
+    const startedAt = Date.now();
     try {
       await task();
+      log.info('export done', { action, kind, durationMs: Date.now() - startedAt });
     } catch (error) {
+      const attributes = { action, kind, durationMs: Date.now() - startedAt };
+      if (error instanceof RecordingCancelledError) log.info('export cancelled', attributes);
+      else log.error('export failed', error, attributes);
       onError(error);
     } finally {
       busy.current = false;
@@ -145,6 +156,7 @@ export function useStoryExport({
   const shareVideo = () =>
     run(
       'share',
+      'video',
       hapticImpact,
       async () => {
         const backgroundVideoUri = await renderVideo();
@@ -160,6 +172,7 @@ export function useStoryExport({
   const shareWithMusic = (video: boolean) =>
     run(
       'share',
+      video ? 'video-with-song' : 'photo-with-song',
       hapticImpact,
       async () => {
         if (video) {
@@ -181,6 +194,7 @@ export function useStoryExport({
   const saveVideo = () =>
     run(
       'save',
+      'video',
       hapticSelection,
       async () => {
         await saveToPhotos(await renderVideo());
@@ -194,6 +208,7 @@ export function useStoryExport({
   const shareToStories = () =>
     run(
       'share',
+      templateActive ? 'template' : 'photo',
       hapticImpact,
       async () => {
         if (templateActive) {
@@ -235,6 +250,7 @@ export function useStoryExport({
   const saveStory = () =>
     run(
       'save',
+      'photo',
       hapticSelection,
       async () => {
         const imageUri = await captureStoryImage(storyRef);

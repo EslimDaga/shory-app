@@ -9,6 +9,9 @@ import Purchases, {
 } from 'react-native-purchases';
 import { strings } from '@/i18n/es';
 import { getSupabase } from '@/services/auth/supabase';
+import { createLogger } from '@/services/observability/logger';
+
+const log = createLogger('purchases');
 
 // App Store purchases go through RevenueCat. The public SDK key is safe in the app: it can only
 // start purchases and read the signed-in user's own status. The secret key lives in Supabase.
@@ -59,18 +62,27 @@ export class StoreError extends Error {
   }
 }
 
+const EXPECTED_STORE_CODES = new Set<string>([
+  PURCHASES_ERROR_CODE.NETWORK_ERROR,
+  PURCHASES_ERROR_CODE.OFFLINE_CONNECTION_ERROR,
+  PURCHASES_ERROR_CODE.PAYMENT_PENDING_ERROR,
+]);
+
 function toStoreError(error: unknown): StoreError {
   const code = (error as { code?: string } | null)?.code ?? null;
   const message = (code && STORE_MESSAGES[code as PURCHASES_ERROR_CODE]) || strings.paywall.failed;
-  if (__DEV__) console.log(`[purchases] store error ${code ?? '?'}:`, (error as Error)?.message);
+  // Connection trouble and payments awaiting approval (Ask to Buy) aren't bugs in the app.
+  if (code && EXPECTED_STORE_CODES.has(code)) log.warn('store error', { storeCode: code });
+  else log.error('store error', error, { storeCode: code ?? 'unknown' });
   return new StoreError(message);
 }
 
 // RevenueCat's default handler sends its errors to console.error, which covers the screen with
-// LogBox in development. They go to the Metro log instead; the paywall shows its own message.
+// LogBox in development. They go through the logger instead; the paywall shows its own message.
 function logFromStore(level: LOG_LEVEL, message: string) {
-  if (!__DEV__ || level === LOG_LEVEL.DEBUG || level === LOG_LEVEL.VERBOSE) return;
-  console.log(`[RevenueCat] ${message}`);
+  if (level === LOG_LEVEL.DEBUG || level === LOG_LEVEL.VERBOSE) return;
+  if (level === LOG_LEVEL.ERROR) log.warn('revenuecat', { sdkMessage: message });
+  else log.debug('revenuecat', { sdkMessage: message });
 }
 
 let configured = false;
@@ -158,7 +170,7 @@ export async function loadPlans(): Promise<Plan[]> {
   const offered = [current.annual, current.monthly].flatMap((pkg) => (pkg ? [pkg.product.identifier] : []));
   const eligibility: Record<string, IntroEligibility> =
     await Purchases.checkTrialOrIntroductoryPriceEligibility(offered).catch((error) => {
-      if (__DEV__) console.log('[purchases] trial eligibility:', (error as Error)?.message);
+      log.warn('trial eligibility failed', { errorMessage: (error as Error)?.message });
       return {};
     });
   const plans: Plan[] = [];
@@ -226,8 +238,10 @@ export async function syncServerPlan(): Promise<ServerPlan | null> {
       'subscription',
       { method: 'POST', timeout: SYNC_TIMEOUT_MS },
     );
+    if (error) log.error('server plan sync failed', error);
     return error || !data ? null : data.subscription;
-  } catch {
+  } catch (error) {
+    log.error('server plan sync failed', error);
     return null;
   }
 }

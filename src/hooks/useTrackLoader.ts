@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Platform } from 'react-native';
 import { strings } from '@/i18n/es';
 import { extractMusicLink, fetchTrackMetadata } from '@/services/music/musicService';
+import { createLogger } from '@/services/observability/logger';
 import type { TrackMetadata } from '@/types/music';
 import { getErrorMessage } from '@/utils/errors';
 import { hapticError } from '@/utils/haptics';
@@ -13,6 +14,8 @@ export type TrackLoaderState =
   | { status: 'idle'; error: string | null }
   | { status: 'loading' }
   | { status: 'ready'; track: TrackMetadata };
+
+const log = createLogger('track');
 
 const DEV_OPEN_URL_PREFIX = '://open?url=';
 // Warming the cover only makes the editor open with it painted; past this the Image loads it itself.
@@ -39,16 +42,20 @@ export function useTrackLoader() {
     const id = ++requestId.current;
     const link = extractMusicLink(text);
     if (!link) {
+      log.info('no music link found');
       hapticError();
       setState({ status: 'idle', error: strings.errors.noMusicLink });
       return;
     }
     setState({ status: 'loading' });
+    const startedAt = Date.now();
     try {
       const track = await fetchTrackMetadata(link);
       await prefetchCover(track.coverUrl);
+      log.info('track loaded', { source: track.source, durationMs: Date.now() - startedAt });
       if (id === requestId.current) setState({ status: 'ready', track });
     } catch (error) {
+      log.error('track load failed', error, { source: link.source, durationMs: Date.now() - startedAt });
       if (id !== requestId.current) return;
       hapticError();
       setState({ status: 'idle', error: getErrorMessage(error) });
@@ -67,6 +74,7 @@ export function useTrackLoader() {
   const idle = state.status === 'idle';
   useEffect(() => {
     if (!shareIntentError || !idle) return;
+    log.warn('share intent failed', { reason: String(shareIntentError) });
     setState({ status: 'idle', error: strings.errors.unknown });
     resetShareIntent();
   }, [shareIntentError, idle, resetShareIntent]);

@@ -9,6 +9,7 @@ import { searchTeams, syncMatch, teamLabel, type FootballTeam } from '@/services
 import { fetchWeather, searchCities, type City } from '@/services/data/weather';
 import { editorColors } from '@/theme/colors';
 import { fonts } from '@/theme/typography';
+import { createLogger } from '@/services/observability/logger';
 import { getErrorMessage } from '@/utils/errors';
 import { hapticSelection, hapticSuccess } from '@/utils/haptics';
 import { Crest } from '@/widgets/Crest';
@@ -25,6 +26,7 @@ type Props = {
 };
 
 const text = strings.widgets.live;
+const log = createLogger('live-data');
 const SEARCH_DELAY_MS = 250;
 
 // Fills a widget's fields from a public API. Whatever it fills stays editable by hand below.
@@ -62,7 +64,10 @@ function useTypeahead<T>(query: string, search: (term: string) => Promise<T[]>) 
       setFailed(null);
       search(term)
         .then((items) => active && setResults({ term, items }))
-        .catch((error) => active && setFailed({ term, message: getErrorMessage(error, text.failed) }));
+        .catch((error) => {
+          log.error('search failed', error);
+          if (active) setFailed({ term, message: getErrorMessage(error, text.failed) });
+        });
     }, SEARCH_DELAY_MS);
     return () => {
       active = false;
@@ -193,6 +198,7 @@ function WeatherSearch({ onFill }: { onFill: (patch: WidgetData) => void }) {
       hapticSuccess();
       setStatus({ kind: 'done', message: text.weatherFilled(city.name) });
     } catch (error) {
+      log.error('weather fetch failed', error);
       if (id !== request.current) return;
       setStatus({ kind: 'error', message: getErrorMessage(error, text.failed) });
     }
@@ -300,6 +306,7 @@ function FootballPicker({ values, onFill }: { values: WidgetData; onFill: (patch
       hapticSuccess();
       setStatus({ kind: 'done', message: text.synced });
     } catch (error) {
+      log.error('match sync failed', error);
       if (id !== request.current) return;
       setStatus({ kind: 'error', message: getErrorMessage(error, text.failed) });
     }

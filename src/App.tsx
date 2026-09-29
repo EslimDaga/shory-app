@@ -1,9 +1,11 @@
+import * as Sentry from '@sentry/react-native';
 import { useState } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ScreenTransition } from '@/components/ScreenTransition';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { AnimatedSplash } from '@/components/splash/AnimatedSplash';
 import { useAppFonts } from '@/hooks/useAppFonts';
 import { useHistory } from '@/hooks/useHistory';
@@ -15,22 +17,29 @@ import { AuthFlow } from '@/screens/auth/AuthFlow';
 import { NewPasswordScreen } from '@/screens/auth/NewPasswordScreen';
 import { EditorScreen } from '@/screens/editor/EditorScreen';
 import { HomeScreen } from '@/screens/home/HomeScreen';
+import { initObservability } from '@/services/observability/sentry';
 import { editorColors } from '@/theme/colors';
 
+// Before the first render, so a crash while starting up is reported too.
+initObservability();
 SplashScreen.preventAutoHideAsync();
 
-export default function App() {
+function App() {
   return (
     <SafeAreaProvider style={styles.root}>
-      <AuthProvider>
-        <SubscriptionProvider>
-          <AppContent />
-          <Paywall />
-        </SubscriptionProvider>
-      </AuthProvider>
+      <AppErrorBoundary>
+        <AuthProvider>
+          <SubscriptionProvider>
+            <AppContent />
+            <Paywall />
+          </SubscriptionProvider>
+        </AuthProvider>
+      </AppErrorBoundary>
     </SafeAreaProvider>
   );
 }
+
+export default Sentry.wrap(App);
 
 function AppContent() {
   const fontsLoaded = useAppFonts();

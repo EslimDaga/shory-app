@@ -31,6 +31,7 @@ import { BackgroundTray } from './components/BackgroundTray';
 import { BottomBar } from './components/BottomBar';
 import { StoryClockProvider, type StoryClockHandle } from '@/components/motion/StoryClock';
 import { VIDEO_FPS } from '@/services/media/videoExport';
+import { createLogger } from '@/services/observability/logger';
 import { TEMPLATE_SECONDS } from '@/templates/templateClock';
 import { ColorPickerSheet } from './components/ColorPickerSheet';
 import { CustomizePanel } from './components/CustomizePanel';
@@ -57,6 +58,8 @@ type Props = {
 };
 
 type CanvasSize = { width: number; height: number };
+
+const log = createLogger('editor');
 
 const MAGIC_PER_IMAGE = 5;
 // A background clip's export length is clamped to this range (seconds).
@@ -227,6 +230,7 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
       setLastPhoto(uri);
       setActiveTool(null);
     } catch (error) {
+      log.error('photo pick failed', error, { source });
       showMessage(getErrorMessage(error, strings.errors.photoOpenFailed), true);
     }
   };
@@ -248,6 +252,7 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
       setFormat('video');
       setActiveTool(null);
     } catch (error) {
+      log.error('video pick failed', error);
       showMessage(getErrorMessage(error, strings.errors.videoOpenFailed), true);
     }
   };
@@ -317,6 +322,7 @@ export function EditorScreen({ track, onClose, onExported }: Props) {
       const uri = await pickPhoto('library');
       if (uri) editTemplate({ coverUri: uri });
     } catch (error) {
+      log.error('template cover pick failed', error);
       showMessage(getErrorMessage(error, strings.errors.photoOpenFailed), true);
     }
   };

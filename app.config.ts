@@ -20,11 +20,26 @@ const REQUIRED_IN_PRODUCTION = [
   'EXPO_PUBLIC_SUPABASE_URL',
   'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
   'EXPO_PUBLIC_REVENUECAT_IOS_KEY',
+  // Without these a release crashes silently: no reports, or reports without readable stack traces.
+  'EXPO_PUBLIC_SENTRY_DSN',
+  'SENTRY_ORG',
+  'SENTRY_PROJECT',
 ];
 const missing = REQUIRED_IN_PRODUCTION.filter((name) => !process.env[name]);
 if (IS_PRODUCTION_BUILD && missing.length > 0) {
   throw new Error(`Production builds need these EAS environment variables: ${missing.join(', ')}`);
 }
+
+// The build uploads the sourcemaps and debug symbols to this Sentry project; the auth token comes
+// from SENTRY_AUTH_TOKEN (EAS "sensitive"), never from here.
+const sentryPlugin: [string, Record<string, string>] = [
+  '@sentry/react-native/expo',
+  {
+    url: 'https://sentry.io/',
+    ...(process.env.SENTRY_ORG ? { organization: process.env.SENTRY_ORG } : {}),
+    ...(process.env.SENTRY_PROJECT ? { project: process.env.SENTRY_PROJECT } : {}),
+  },
+];
 
 const withoutAppleSignIn: ConfigPlugin = (config) =>
   withEntitlementsPlist(config, (mod) => {
@@ -59,6 +74,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         '@react-native-google-signin/google-signin',
         { iosUrlScheme: process.env.GOOGLE_IOS_URL_SCHEME ?? GOOGLE_IOS_URL_SCHEME_PLACEHOLDER },
       ],
+      sentryPlugin,
     ],
     extra: {
       ...config.extra,

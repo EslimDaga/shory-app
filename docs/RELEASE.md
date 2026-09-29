@@ -79,7 +79,7 @@ Ver `docs/PAYMENTS.md`: productos de App Store, llave `appl_…` de RevenueCat y
 
 ## 8. Compilar y enviar
 
-Un build `production` falla a propósito si falta `EXPO_PUBLIC_APPLE_SIGN_IN=true` (guía 4.8) o alguna de `EXPO_PUBLIC_PRIVACY_URL`, `EXPO_PUBLIC_TERMS_URL`, `EXPO_PUBLIC_FB_APP_ID`, `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` en EAS (`app.config.ts`).
+Un build `production` falla a propósito si falta `EXPO_PUBLIC_APPLE_SIGN_IN=true` (guía 4.8) o alguna de `EXPO_PUBLIC_PRIVACY_URL`, `EXPO_PUBLIC_TERMS_URL`, `EXPO_PUBLIC_FB_APP_ID`, `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT` en EAS (`app.config.ts`). Además necesita `SENTRY_AUTH_TOKEN` en EAS con visibilidad *sensitive*: sin él la subida de sourcemaps falla y el build también.
 
 ```bash
 npx eas-cli build --platform ios --profile production
@@ -87,6 +87,12 @@ npx eas-cli submit --platform ios --latest
 ```
 
 El build aparece en TestFlight; pruébalo y envíalo a revisión desde App Store Connect.
+
+## Monitoreo (Sentry)
+
+Los errores, crashes nativos y logs llegan al proyecto `shory-app` de la organización `eslim` en sentry.io. Solo se envía desde iOS/Android con `EXPO_PUBLIC_SENTRY_DSN` puesto; en web (la suite e2e) y sin DSN el logger solo escribe en la consola de Metro. El entorno (`development`, `preview`, `production`) sale de `EXPO_PUBLIC_APP_ENV`, que fija `eas.json` por perfil.
+
+En el código se usa `createLogger('área')` de `src/services/observability/logger.ts`: `info`/`warn` van a Sentry Logs; `error` crea un issue, salvo los errores esperados (sin conexión, timeout, permisos), que quedan como `warn`.
 
 ## Android (después)
 
@@ -105,4 +111,7 @@ El build aparece en TestFlight; pruébalo y envíalo a revisión desde App Store
 | `FOOTBALL_DATA_KEY` | football-data.org (plan gratis) | `supabase secrets set` (ya puesto); lo usa la función `football` |
 | `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_CLIENT_ID`, `APPLE_PRIVATE_KEY` | key de Sign in with Apple (`.p8`) | `supabase secrets set` (ver AUTH_SETUP) |
 | `ascAppId` | App Store Connect → App Information | `eas.json` |
+| `EXPO_PUBLIC_SENTRY_DSN` | sentry.io → proyecto `shory-app` → Client Keys | `.env.local` + EAS (ya en `.env.local`) |
+| `SENTRY_ORG` / `SENTRY_PROJECT` | `eslim` / `shory-app` | `.env.local` + EAS (ya en `.env.local`) |
+| `SENTRY_AUTH_TOKEN` | sentry.io → User Settings → Auth Tokens | `.env.local` + EAS *sensitive* — nunca en git |
 | Resto (`SUPABASE_*`, `GOOGLE_*`) | ya configurado | copiar a EAS con `eas env:create` |

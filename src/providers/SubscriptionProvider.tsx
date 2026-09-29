@@ -18,6 +18,7 @@ import {
   type Plan,
   type ServerPlan,
 } from '@/services/purchases/purchases';
+import { createLogger } from '@/services/observability/logger';
 import { useAuth } from './AuthProvider';
 
 // Why the paywall opened: it leads with the feature the person just tried to use.
@@ -50,10 +51,8 @@ type SubscriptionContextValue = {
 
 type PlansStatus = 'idle' | 'loading' | 'failed';
 
-// Store problems are otherwise invisible in the paywall; in development they're logged.
-function logStoreError(where: string, error: unknown) {
-  if (__DEV__) console.warn(`[purchases] ${where}:`, error instanceof Error ? error.message : error);
-}
+// Store problems are otherwise invisible in the paywall.
+const log = createLogger('purchases');
 
 // Only our own wording reaches the paywall, never the store's developer-facing text.
 const storeMessage = (error: unknown) =>
@@ -146,14 +145,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         const [info, loadedPlans] = await Promise.all([
           getCustomerInfo(),
           loadPlans().catch((error) => {
-            logStoreError('loadPlans', error);
+            log.error('load plans failed', error);
             return [];
           }),
         ]);
         onStoreInfo(info);
         if (active) update(userId, { plans: loadedPlans });
       } catch (error) {
-        logStoreError('startPurchases', error);
+        log.error('start purchases failed', error);
         // Store unreachable: the app keeps working on the free plan and the server's record.
       }
       await refreshServerPlan();
@@ -177,7 +176,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       setPlansError(null);
       setPlansStatus('idle');
     } catch (error) {
-      logStoreError('reloadPlans', error);
+      log.error('reload plans failed', error);
       if (userIdRef.current !== userId) return;
       setPlansError(error instanceof Error ? error.message : String(error));
       setPlansStatus('failed');
@@ -221,6 +220,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     });
     // The store already confirmed Pro: no need to wait for the server, which catches up behind.
     if (hasPro(info)) {
+      log.info('pro unlocked', { action });
       setUnlocked(action);
       return { ok: true };
     }
@@ -247,6 +247,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       return await settle(owner, await purchase(plan), 'purchase');
     } catch (caught) {
       if (caught instanceof PurchaseCancelledError) return { ok: false, message: null };
+      log.warn('purchase failed', { period: plan.period });
       return fail(storeMessage(caught));
     } finally {
       setBusy(null);
@@ -262,6 +263,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       await ensureUser(owner);
       return await settle(owner, await restore(), 'restore');
     } catch (caught) {
+      log.warn('restore failed');
       return fail(storeMessage(caught));
     } finally {
       setBusy(null);
