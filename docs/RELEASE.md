@@ -44,6 +44,7 @@ Ya publicadas en Vercel (proyecto `shory-legal`, equipo *eslim's projects*) desd
 
 - https://shory-legal.vercel.app/privacy
 - https://shory-legal.vercel.app/terms
+- https://shory-legal.vercel.app/support — va en App Store Connect como *Support URL* (obligatoria)
 
 Si editas `legal/*.html`, vuelve a desplegar ese proyecto. Las URLs ya están en `.env.local` y como valor por defecto en `src/constants/legal.ts`; súbelas también a EAS.
 
