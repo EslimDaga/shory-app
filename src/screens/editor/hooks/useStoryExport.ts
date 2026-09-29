@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { View } from 'react-native';
 import { strings } from '@/i18n/es';
-import { openInstagramStoryCamera, shareToInstagramStories } from '@/services/instagram/instagramStories';
+import { shareToInstagramStories } from '@/services/instagram/instagramStories';
 import { saveToPhotos } from '@/services/media/photoLibrary';
 import { deleteFile, fileExists } from '@/services/media/tempFiles';
 import { renderStoryVideo } from '@/services/media/videoExport';
@@ -15,7 +15,7 @@ import { hapticImpact, hapticSelection, hapticSuccess } from '@/utils/haptics';
 
 const log = createLogger('export');
 
-type ExportKind = 'photo' | 'video' | 'template' | 'photo-with-song' | 'video-with-song';
+type ExportKind = 'photo' | 'video' | 'template';
 
 export type ExportAction = 'share' | 'save';
 
@@ -166,31 +166,6 @@ export function useStoryExport({
       reportUnlessCancelled(strings.errors.instagramOpenFailed),
     );
 
-  // Instagram doesn't let a story shared from another app carry a song. So "with the song" saves
-  // the finished story to Photos and opens Instagram's story camera: picked from the gallery
-  // there, the story takes the Music sticker like any other.
-  const shareWithMusic = (video: boolean) =>
-    run(
-      'share',
-      video ? 'video-with-song' : 'photo-with-song',
-      hapticImpact,
-      async () => {
-        if (video) {
-          await saveToPhotos(await renderVideo());
-        } else {
-          const imageUri = await captureStoryImage(storyRef);
-          try {
-            await saveToPhotos(imageUri);
-          } finally {
-            deleteFile(imageUri);
-          }
-        }
-        await openInstagramStoryCamera();
-        onExported?.(track);
-      },
-      reportUnlessCancelled(strings.errors.instagramOpenFailed),
-    );
-
   const saveVideo = () =>
     run(
       'save',
@@ -274,7 +249,6 @@ export function useStoryExport({
     videoExport,
     recording: videoExport !== null,
     shareToStories,
-    shareWithMusic,
     saveStory,
     shareVideo,
     saveVideo,

@@ -400,32 +400,9 @@ test.describe('Editor', () => {
       await expect(page.getByText('La captura solo funciona en iOS/Android.')).toBeVisible();
     });
 
-    test('compartir ofrece "con la canción" y "directo"', async ({ page }) => {
+    test('compartir va directo a Instagram y en web avisa que la captura no está disponible', async ({ page }) => {
       await page.getByRole('button', { name: 'Compartir en Instagram Stories' }).click();
-      const sheet = page.getByRole('dialog');
-      await expect(sheet.getByText('Compartir en Instagram')).toBeVisible();
-      await expect(sheet.getByRole('button', { name: /^Con la canción/ })).toContainText('Recomendado');
-      await expect(sheet.getByRole('button', { name: /^Directo, sin canción/ })).toBeVisible();
-      await sheet.getByRole('button', { name: 'Cerrar', exact: true }).click();
-      await expect(sheet).toBeHidden();
-    });
-
-    test('"con la canción" copia "título - artista" al portapapeles', async ({ page }) => {
-      await page.getByRole('button', { name: 'Compartir en Instagram Stories' }).click();
-      await page
-        .getByRole('dialog')
-        .getByRole('button', { name: /^Con la canción/ })
-        .click();
-      const song = `${SPOTIFY_TRACK.title} - ${SPOTIFY_TRACK.artist}`;
-      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(song);
-    });
-
-    test('"directo" en web avisa que la captura no está disponible', async ({ page }) => {
-      await page.getByRole('button', { name: 'Compartir en Instagram Stories' }).click();
-      await page
-        .getByRole('dialog')
-        .getByRole('button', { name: /^Directo, sin canción/ })
-        .click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(page.getByText('La captura solo funciona en iOS/Android.')).toBeVisible();
     });
   });

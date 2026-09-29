@@ -314,18 +314,6 @@ export const strings = {
     shareToStories: 'Compartir en Instagram Stories',
     savedToPhotos: 'Guardada en Fotos',
     videoSaved: 'Video guardado en Fotos',
-    share: {
-      title: 'Compartir en Instagram',
-      subtitle: 'Instagram no deja agregar música a historias que llegan desde otra app.',
-      withSong: 'Con la canción',
-      withSongBadge: 'Recomendado',
-      withSongBody:
-        'La guardamos en tu galería y abrimos Instagram. Elige la historia desde la galería y agrega la canción con el sticker de Música: ya copiamos su nombre para que solo lo pegues.',
-      direct: 'Directo, sin canción',
-      directBody:
-        'Llega a Instagram al instante, con tu widget listo para mover. No se le puede poner música.',
-      songCopied: (song: string) => `Copiamos "${song}". Pégalo en el sticker de Música.`,
-    },
     format: { photo: 'Foto', video: 'Video' },
     exporting: {
       title: 'Exportando video',
