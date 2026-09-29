@@ -78,10 +78,10 @@ test.describe('Editor', () => {
       await tool(page, 'Widgets').click();
       const player = page.getByRole('button', { name: 'Widget Player', exact: true });
       const airpods = page.getByRole('button', { name: 'Widget Isla: AirPods', exact: true });
-      const steps = page.getByRole('button', { name: 'Widget Pasos, función Pro', exact: true });
+      const run = page.getByRole('button', { name: 'Widget Resumen de carrera, función Pro', exact: true });
       await expect(player).toHaveAttribute('aria-selected', 'true');
       await expect(airpods).toHaveAttribute('aria-selected', 'false');
-      await expect(steps).toContainText('PRO');
+      await expect(run).toContainText('PRO');
       await expect(player).not.toContainText('PRO');
       await expect(
         page.getByRole('button', { name: 'Widget Clima, función Pro', exact: true }),
@@ -122,20 +122,20 @@ test.describe('Editor', () => {
       await tool(page, 'Widgets').click();
       await page.getByRole('button', { name: 'Abrir biblioteca' }).click();
       const library = page.getByRole('dialog');
-      await expect(library.getByText('21 widgets para tu historia')).toBeVisible();
+      await expect(library.getByText('9 widgets para tu historia')).toBeVisible();
 
       const fitness = library.getByRole('button', { name: 'Fitness', exact: true });
       await fitness.click();
       await expect(fitness).toHaveAttribute('aria-selected', 'true');
       await expect(
-        library.getByRole('button', { name: 'Widget Pasos, función Pro', exact: true }),
+        library.getByRole('button', { name: 'Widget Resumen de carrera, función Pro', exact: true }),
       ).toBeVisible();
       await expect(library.getByRole('button', { name: 'Widget Player', exact: true })).toBeHidden();
 
       await library.getByRole('button', { name: 'Dynamic Island', exact: true }).click();
       await expect(fitness).toHaveAttribute('aria-selected', 'false');
       await expect(
-        library.getByRole('button', { name: 'Widget Pasos, función Pro', exact: true }),
+        library.getByRole('button', { name: 'Widget Resumen de carrera, función Pro', exact: true }),
       ).toBeHidden();
       await library.getByRole('button', { name: 'Widget Isla: AirPods', exact: true }).click();
       await expect(library).toBeHidden();
