@@ -70,9 +70,10 @@ npx eas-cli env:create    # sube a EAS cada variable de .env.local (entorno prod
 
 1. https://appstoreconnect.apple.com → Apps → **+** → Nueva app: nombre "Shory", bundle `com.shoryapp.app`, SKU `shory-ios`.
 2. Copia el **Apple ID** numérico de la app (App Information) y agrégalo en `eas.json` como `submit.production.ios.ascAppId`.
-3. **App Privacy**: declara *Contact Info → Name, Email* y *Identifiers → User ID*, uso *App Functionality*, vinculados al usuario, sin tracking. Es lo mismo que declara el privacy manifest de `app.json` (`ios.privacyManifests`); si cambias uno, cambia el otro.
+3. **App Privacy**: declara *Contact Info → Name, Email*, *Identifiers → User ID*, *Purchases → Purchase History* y *Diagnostics → Crash Data, Performance Data, Other Diagnostic Data* (Sentry), uso *App Functionality*, vinculados al usuario, sin tracking. Es lo mismo que declara el privacy manifest de `app.json` (`ios.privacyManifests`); si cambias uno, cambia el otro.
 4. **Notas para el revisor** (App Review Information): crea una cuenta de prueba con email y contraseña ya confirmada y ponla ahí, y explica que el flujo empieza compartiendo o pegando un link de Spotify, Apple Music o YouTube Music.
 5. Capturas de iPhone 6.9" (1320×2868) y la descripción.
+6. **Support URL**: `https://shory-legal.vercel.app/support`; **Privacy Policy URL**: `https://shory-legal.vercel.app/privacy`.
 
 ## 7b. Pagos
 
